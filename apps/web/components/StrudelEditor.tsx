@@ -8,11 +8,11 @@ import { PatternPanel } from './PatternPanel'
 import '@strudel/repl'
 
 interface StrudelMirror {
-  code: string   // updated on every keystroke by the internal CodeMirror onChange
+  code: string
   setCode(code: string): void
-  evaluate(): Promise<void>
-  start(): void
-  stop(): void
+  evaluate(autostart?: boolean): Promise<void>
+  stop(): Promise<void>
+  toggle(): Promise<void>
 }
 
 interface StrudelEditorElement extends HTMLElement {
@@ -79,7 +79,7 @@ export function StrudelEditor() {
         }
         enqueueEval(msg.code, msg.name)
       } else if (msg.type === 'play') {
-        editorRef.current?.start()
+        editorRef.current?.evaluate()
         setIsPlaying(true)
         sendRef.current?.({ type: 'state', playing: true })
       } else if (msg.type === 'stop') {
@@ -103,6 +103,16 @@ export function StrudelEditor() {
       const el = containerRef.current?.querySelector('strudel-editor') as StrudelEditorElement | null
       if (!el?.editor) return
       editorRef.current = el.editor
+
+      // <strudel-editor> has no content; the real CodeMirror container is
+      // inserted as its next sibling by connectedCallback. Hide the placeholder
+      // and give the sibling absolute fill so it is visible and reachable.
+      el.style.display = 'none'
+      const sibling = el.nextElementSibling as HTMLElement | null
+      if (sibling) {
+        sibling.style.position = 'absolute'
+        sibling.style.inset = '0'
+      }
 
       // Replay any message that arrived before the editor was ready
       const pending = pendingMessageRef.current
@@ -135,7 +145,7 @@ export function StrudelEditor() {
   }, [status, send])
 
   function handlePlay() {
-    editorRef.current?.start()
+    editorRef.current?.evaluate()
     setIsPlaying(true)
     send({ type: 'state', playing: true })
   }
@@ -234,8 +244,8 @@ export function StrudelEditor() {
 
       {/* ── Editor + Panel ─────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <div ref={containerRef} style={{ flex: 1, overflow: 'hidden' }}>
-          <strudel-editor suppressHydrationWarning style={{ width: '100%', height: '100%', display: 'block' }} />
+        <div ref={containerRef} style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+          <strudel-editor suppressHydrationWarning />
         </div>
 
         {showPanel && (
