@@ -168,8 +168,11 @@ const STRUDEL_DOCS = `
 - .fast(2)                  — double the speed
 - .slow(4)                  — quarter speed
 - .rev()                    — reverse
-- .every(4, x => x.fast(2))— every 4 cycles apply transform
-- .off(0.25, x => x.fast(2)) — offset copy with transform (note: .up() is not available)
+- .every(4, x => x.fast(2)) — every 4 cycles apply transform
+- .off(0.25, x => x.add(7)) — offset copy with transform
+- .add(7)                   — transpose note pattern up 7 semitones (NOT .up())
+- .sub(7)                   — transpose down (NOT .down())
+- .mask("1 0 1 1")          — gate the pattern with a binary mask
 
 ## Effects
 - .gain(0.8)                — volume multiplier

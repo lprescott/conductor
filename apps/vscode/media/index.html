@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-{{NONCE}}' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src * blob: data:; connect-src https: wss: blob:; font-src data: blob:; worker-src blob: 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-{{NONCE}}' 'unsafe-eval' blob: data:; worker-src blob: data: 'self'; child-src blob: data: 'self'; style-src 'unsafe-inline'; img-src data: blob:; media-src * blob: data:; connect-src https: wss: blob: data:; font-src data: blob:;">
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -190,6 +190,8 @@
     <span id="pattern-name">&mdash;</span>
     <div class="spacer"></div>
     <span id="hint">Click Play to start audio</span>
+    <div class="sep"></div>
+    <button id="btn-beep" class="tbtn" title="Play a 440 Hz beep to verify webview audio">Test Tone</button>
   </div>
   <div id="editor-wrap">
     <strudel-editor id="se"></strudel-editor>
@@ -205,16 +207,41 @@
 // Capture every AudioContext strudel creates so we can resume it on user gesture.
 (function () {
   const Orig = window.AudioContext || window.webkitAudioContext;
-  if (!Orig) return;
+  if (!Orig) { console.warn('[conductor] AudioContext not available'); return; }
   class Wrapped extends Orig {
     constructor(...args) {
       super(...args);
       window.__audioContexts = window.__audioContexts || [];
       window.__audioContexts.push(this);
+      console.log('[conductor] AudioContext created, state:', this.state, 'sampleRate:', this.sampleRate);
+      this.addEventListener('statechange', () => {
+        console.log('[conductor] AudioContext state →', this.state);
+      });
     }
   }
   window.AudioContext = Wrapped;
   if (window.webkitAudioContext) window.webkitAudioContext = Wrapped;
+})();
+
+// Surface every error/rejection so we can see what's wrong without devtools.
+window.addEventListener('error', (e) => {
+  console.error('[conductor] error:', e.message, e.filename + ':' + e.lineno);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[conductor] unhandled rejection:', e.reason);
+});
+
+// Strudel logs eval errors via console.log with "[eval] error:" / "[cyclist] error:"
+// prefixes. Intercept so the webview can show them without devtools.
+(function () {
+  const orig = console.log;
+  console.log = function (...args) {
+    const first = typeof args[0] === 'string' ? args[0] : '';
+    if (first.includes('error:')) {
+      window.dispatchEvent(new CustomEvent('strudel-eval-error', { detail: first }));
+    }
+    orig.apply(console, args);
+  };
 })();
 </script>
 <script nonce="{{NONCE}}" src="{{STRUDEL_URI}}"></script>
@@ -251,26 +278,32 @@
     errorBar.style.display = 'none'
   }
 
-  async function resumeAudio() {
+  // Synchronously kick every AudioContext to resume — must happen inside the
+  // user-gesture call frame, so no awaits before resume() is invoked.
+  function resumeAudio() {
     const ctxs = window.__audioContexts || []
-    for (const ctx of ctxs) {
-      if (ctx && ctx.state === 'suspended') {
-        try { await ctx.resume() } catch (_) { /* ignore */ }
-      }
-    }
+    return Promise.all(ctxs.map((ctx) => {
+      if (!ctx || ctx.state !== 'suspended') return Promise.resolve()
+      console.log('[conductor] resuming AudioContext')
+      return ctx.resume().catch((e) => console.error('[conductor] resume failed:', e))
+    }))
   }
 
   async function doPlay() {
     if (!editor || isPlaying) return
+    const resumed = resumeAudio()
     try {
-      await resumeAudio()
       await editor.evaluate(true)
+      await resumed
+      // Second pass: strudel may have created a fresh context during evaluate.
+      await resumeAudio()
       isPlaying = true
       clearError()
       updateButtons()
       vscode.postMessage({ type: 'state', playing: true })
     } catch (err) {
       const message = String(err && err.message ? err.message : err)
+      console.error('[conductor] evaluate failed:', err)
       showError(message)
       vscode.postMessage({ type: 'error', message })
     }
@@ -290,6 +323,32 @@
 
   btnPlay.addEventListener('click', doPlay)
   btnStop.addEventListener('click', doStop)
+
+  window.addEventListener('strudel-eval-error', (e) => {
+    showError(e.detail)
+    vscode.postMessage({ type: 'error', message: e.detail })
+  })
+
+  // Plain-vanilla Web Audio beep — bypasses Strudel entirely so we can tell
+  // whether webview audio works at all.
+  document.getElementById('btn-beep').addEventListener('click', async () => {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext
+      const ctx = new Ctx()
+      if (ctx.state === 'suspended') await ctx.resume()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.frequency.value = 440
+      gain.gain.value = 0.15
+      osc.connect(gain).connect(ctx.destination)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.3)
+      console.log('[conductor] beep fired, ctx state:', ctx.state, 'destination channels:', ctx.destination.channelCount)
+    } catch (err) {
+      console.error('[conductor] beep failed:', err)
+      showError('Beep failed: ' + (err && err.message || err))
+    }
+  })
 
   // Replace Strudel's hard-coded theme variables with VS Code's, every time
   // Strudel re-injects them.
