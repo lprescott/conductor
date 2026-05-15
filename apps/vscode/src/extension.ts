@@ -9,8 +9,23 @@ import type { WebviewInbound } from './panel'
 let client: ConductorClient
 let statusBar: vscode.StatusBarItem
 
+let currentPatternName: string | undefined
+let lastPushedUri: vscode.Uri | undefined
+let lastPatternMessage: { type: 'pattern'; code: string; name?: string } | undefined
+
 function serverUrl(): string {
   return vscode.workspace.getConfiguration('conductor').get<string>('serverUrl', 'http://localhost:7777')
+}
+
+function syncPanelState(): void {
+  const s = client.getState()
+  StrudelPanel.instance?.post({
+    type: 'ui_state',
+    playing: s.playing,
+    connected: client.isConnected(),
+    patternName: currentPatternName,
+    error: s.error,
+  })
 }
 
 function renderStatusBar(): void {
@@ -32,10 +47,16 @@ function renderStatusBar(): void {
     statusBar.tooltip = 'Stopped — click to play'
     statusBar.backgroundColor = undefined
   }
+  syncPanelState()
 }
 
-// Messages from the Strudel webview → relay to daemon + update local state
 function handleWebviewMessage(msg: WebviewInbound): void {
+  if (msg.type === 'ready') {
+    syncPanelState()
+    if (lastPatternMessage) StrudelPanel.instance?.post(lastPatternMessage)
+    void client.fetchState().then(() => syncPanelState()).catch(() => {})
+    return
+  }
   client.send(msg)
   if (msg.type === 'state')   client.updateState({ playing: msg.playing })
   if (msg.type === 'error')   client.updateState({ error: msg.message })
@@ -58,25 +79,40 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerTreeDataProvider('conductorPatterns', patternProvider)
   )
 
-  // ── Daemon WS events → status bar + webview bridge ────────────────────────
+  // ── Daemon WS events ──────────────────────────────────────────────────────
   client.on('connected', () => {
     renderStatusBar()
     patternProvider.refresh()
-    // Fetch authoritative state on (re)connect
     void client.fetchState().then(renderStatusBar).catch(() => {})
   })
 
   client.on('disconnected', renderStatusBar)
 
   client.on('message', (msg) => {
-    // Forward broadcasts that the webview needs to act on
-    if (msg.type === 'pattern' || msg.type === 'play' || msg.type === 'stop') {
+    if (msg.type === 'pattern') {
+      if (msg.name) currentPatternName = msg.name
+      lastPatternMessage = msg
+      StrudelPanel.instance?.post(msg)
+    } else if (msg.type === 'play' || msg.type === 'stop') {
       StrudelPanel.instance?.post(msg)
     }
     renderStatusBar()
   })
 
   renderStatusBar()
+
+  // ── Auto-push on save of last-pushed file ─────────────────────────────────
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument(async (doc) => {
+      if (!lastPushedUri) return
+      if (doc.uri.toString() !== lastPushedUri.toString()) return
+      const code = doc.getText().trim()
+      if (!code) return
+      try {
+        await client.setPattern(code)
+      } catch { /* status bar already shows disconnected */ }
+    })
+  )
 
   // ── Commands ──────────────────────────────────────────────────────────────
   context.subscriptions.push(
@@ -90,7 +126,6 @@ export function activate(context: vscode.ExtensionContext): void {
         await client.play()
         client.updateState({ playing: true, error: null })
         renderStatusBar()
-        // Ensure panel plays even when WS broadcast hasn't arrived yet
         StrudelPanel.instance?.post({ type: 'play' })
       } catch (err) {
         vscode.window.showErrorMessage(`Conductor: ${String(err)}`)
@@ -121,18 +156,39 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!code) { vscode.window.showWarningMessage('Conductor: Active file is empty.'); return }
       try {
         await client.setPattern(code)
-        // If panel isn't open, offer to open it
-        if (!StrudelPanel.instance) {
-          const choice = await vscode.window.showInformationMessage(
-            'Conductor: Pattern pushed.', 'Open Panel'
-          )
-          if (choice === 'Open Panel') {
-            StrudelPanel.createOrShow(context.extensionUri, handleWebviewMessage)
-          }
-        }
+        lastPushedUri = editor.document.uri
+        StrudelPanel.createOrShow(context.extensionUri, handleWebviewMessage)
       } catch (err) {
         vscode.window.showErrorMessage(`Conductor: ${String(err)}`)
       }
+    }),
+
+    vscode.commands.registerCommand('conductor.openPatternFile', async () => {
+      const configured = vscode.workspace.getConfiguration('conductor').get<string>('patternFile', '')
+      let fileUri: vscode.Uri | undefined
+
+      if (configured) {
+        fileUri = vscode.Uri.file(configured)
+      } else {
+        for (const folder of vscode.workspace.workspaceFolders ?? []) {
+          const candidate = vscode.Uri.joinPath(folder.uri, 'pattern.js')
+          try {
+            await vscode.workspace.fs.stat(candidate)
+            fileUri = candidate
+            break
+          } catch { /* not found in this folder */ }
+        }
+      }
+
+      if (!fileUri) {
+        vscode.window.showWarningMessage(
+          'Conductor: pattern.js not found in workspace. Set conductor.patternFile in settings.'
+        )
+        return
+      }
+
+      const doc = await vscode.workspace.openTextDocument(fileUri)
+      await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Beside, preview: false })
     }),
 
     vscode.commands.registerCommand('conductor.savePattern', async () => {
@@ -169,9 +225,8 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!name) return
       try {
         await client.loadPattern(name)
-        if (!StrudelPanel.instance) {
-          StrudelPanel.createOrShow(context.extensionUri, handleWebviewMessage)
-        }
+        currentPatternName = name
+        StrudelPanel.createOrShow(context.extensionUri, handleWebviewMessage)
       } catch (err) {
         vscode.window.showErrorMessage(`Conductor: ${String(err)}`)
       }

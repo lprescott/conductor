@@ -19,7 +19,8 @@
       { "command": "conductor.loadPattern",    "title": "Conductor: Load Pattern..." },
       { "command": "conductor.deletePattern",  "title": "Conductor: Delete Pattern",          "icon": "$(trash)" },
       { "command": "conductor.refreshPatterns","title": "Conductor: Refresh Patterns",        "icon": "$(refresh)" },
-      { "command": "conductor.initMcp",        "title": "Conductor: Add .mcp.json to Workspace" }
+      { "command": "conductor.initMcp",          "title": "Conductor: Add .mcp.json to Workspace" },
+      { "command": "conductor.openPatternFile", "title": "Conductor: Open Pattern File",         "icon": "$(go-to-file)" }
     ],
     "views": {
       "explorer": [
@@ -31,6 +32,7 @@
     },
     "menus": {
       "view/title": [
+        { "command": "conductor.openPatternFile", "when": "view == conductorPatterns", "group": "navigation" },
         { "command": "conductor.refreshPatterns", "when": "view == conductorPatterns", "group": "navigation" },
         { "command": "conductor.savePattern",     "when": "view == conductorPatterns", "group": "navigation" }
       ],
@@ -61,6 +63,11 @@
           "type": "string",
           "default": "http://localhost:7777",
           "description": "Conductor daemon base URL (change if running on a non-default port)"
+        },
+        "conductor.patternFile": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the live pattern file. Leave blank to search for pattern.js in the workspace root."
         }
       }
     }

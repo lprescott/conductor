@@ -4,6 +4,7 @@ import * as fs from 'node:fs'
 import { randomBytes } from 'node:crypto'
 
 export type WebviewInbound =
+  | { type: 'ready' }
   | { type: 'state'; playing: boolean }
   | { type: 'error'; message: string }
   | { type: 'cleared' }

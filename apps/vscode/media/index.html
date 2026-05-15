@@ -4,110 +4,292 @@
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-{{NONCE}}' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src * blob: data:; connect-src https: wss: blob:; font-src data: blob:; worker-src blob: 'self';">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { height: 100%; overflow: hidden; background: #1e1e2e; color: #cdd6f4; font-family: monospace; }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--vscode-editor-background, #1e1e1e);
+      color: var(--vscode-editor-foreground, #d4d4d4);
+      font-family: var(--vscode-font-family, 'Segoe UI', system-ui, sans-serif);
+      font-size: var(--vscode-font-size, 13px);
+    }
+
+    #root { display: flex; flex-direction: column; height: 100%; }
+
+    /* ── Toolbar ─────────────────────────────────────────────────────────── */
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      background: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-sideBar-background, #252526));
+      border-bottom: 1px solid var(--vscode-panel-border, var(--vscode-editorGroup-border, #3c3c3c));
+      flex-shrink: 0;
+      height: 35px;
+      user-select: none;
+    }
+
+    .tbtn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 10px;
+      border: 1px solid transparent;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: inherit;
+      line-height: 1.5;
+      white-space: nowrap;
+      transition: background 80ms;
+      background: var(--vscode-button-secondaryBackground, #3a3d41);
+      color: var(--vscode-button-secondaryForeground, #cccccc);
+    }
+    .tbtn:hover:not(:disabled) {
+      background: var(--vscode-button-secondaryHoverBackground, #45494e);
+    }
+    .tbtn:disabled { opacity: 0.38; cursor: default; }
+
+    #btn-play {
+      background: var(--vscode-button-background, #0e639c);
+      color: var(--vscode-button-foreground, #ffffff);
+    }
+    #btn-play:hover:not(:disabled) {
+      background: var(--vscode-button-hoverBackground, #1177bb);
+    }
+
+    #btn-stop.live {
+      background: transparent;
+      color: var(--vscode-errorForeground, #f48771);
+      border-color: currentColor;
+    }
+    #btn-stop.live:hover:not(:disabled) {
+      background: rgba(244, 135, 113, 0.1);
+    }
+
+    .sep {
+      width: 1px;
+      height: 18px;
+      background: var(--vscode-panel-border, #3c3c3c);
+      flex-shrink: 0;
+      margin: 0 4px;
+    }
+
+    #status-group { display: flex; align-items: center; gap: 5px; }
+
+    #dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--vscode-editorError-foreground, #f48771);
+    }
+    #dot.ok    { background: #4ec9b0; }
+    #dot.pulse {
+      background: #4ec9b0;
+      animation: beat 0.9s ease-in-out infinite;
+    }
+    @keyframes beat {
+      0%, 100% { transform: scale(1);   opacity: 1; }
+      50%       { transform: scale(1.5); opacity: 0.6; }
+    }
+
+    #status-label {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground, #8b949e);
+    }
+
+    #pattern-name {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--vscode-foreground, #cccccc);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .spacer { flex: 1; min-width: 0; }
+
+    /* ── Editor ──────────────────────────────────────────────────────────── */
+    #editor-wrap { flex: 1; position: relative; overflow: hidden; }
+    strudel-editor { display: none; }
+
+    /* ── Error bar (bottom) ──────────────────────────────────────────────── */
     #error-bar {
       display: none;
-      padding: 5px 12px;
-      background: #2d0a0a;
-      border-bottom: 1px solid #7a1a1a;
-      color: #ff6b6b;
+      padding: 5px 10px;
+      background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+      border-top: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
+      color: var(--vscode-editorError-foreground, #f48771);
       font-size: 11px;
+      font-family: var(--vscode-editor-font-family, monospace);
       white-space: pre-wrap;
       word-break: break-all;
+      max-height: 80px;
+      overflow-y: auto;
+      flex-shrink: 0;
     }
-    #wrap { position: relative; height: 100%; }
-    strudel-editor { display: none; }
   </style>
 </head>
 <body>
-  <div id="error-bar"></div>
-  <div id="wrap">
+<div id="root">
+  <div id="toolbar">
+    <button id="btn-play" class="tbtn" title="Play (Cmd/Ctrl+Shift+Space)" disabled>&#x25BA; Play</button>
+    <button id="btn-stop" class="tbtn" title="Stop" disabled>&#x25A0; Stop</button>
+    <div class="sep"></div>
+    <div id="status-group">
+      <div id="dot"></div>
+      <span id="status-label">Connecting&hellip;</span>
+    </div>
+    <div class="sep"></div>
+    <span id="pattern-name">&mdash;</span>
+    <div class="spacer"></div>
+  </div>
+  <div id="editor-wrap">
     <strudel-editor id="se"></strudel-editor>
   </div>
-  <script nonce="{{NONCE}}" src="{{STRUDEL_URI}}"></script>
-  <script nonce="{{NONCE}}">
-    (function () {
-      const vscode = acquireVsCodeApi()
-      let editor = null
-      let isPlaying = false
+  <div id="error-bar"></div>
+</div>
 
-      const errorBar = document.getElementById('error-bar')
-      const wrap = document.getElementById('wrap')
+<script nonce="{{NONCE}}" src="{{STRUDEL_URI}}"></script>
+<script nonce="{{NONCE}}">
+(function () {
+  const vscode = acquireVsCodeApi()
 
-      function showError(msg) {
-        errorBar.textContent = msg
-        errorBar.style.display = 'block'
-        wrap.style.height = 'calc(100% - ' + errorBar.offsetHeight + 'px)'
-      }
+  let editor = null
+  let editorReady = false
+  let isPlaying = false
+  let isConnected = false
 
-      function clearError() {
-        errorBar.style.display = 'none'
-        wrap.style.height = '100%'
-      }
+  const btnPlay      = document.getElementById('btn-play')
+  const btnStop      = document.getElementById('btn-stop')
+  const dot          = document.getElementById('dot')
+  const statusLabel  = document.getElementById('status-label')
+  const patternNameEl = document.getElementById('pattern-name')
+  const errorBar     = document.getElementById('error-bar')
 
-      customElements.whenDefined('strudel-editor').then(function () {
-        const el = document.getElementById('se')
-        if (!el || !el.editor) return
-        editor = el.editor
+  function updateButtons() {
+    btnPlay.disabled = !editorReady || isPlaying
+    btnStop.disabled = !editorReady || !isPlaying
+    btnStop.classList.toggle('live', isPlaying)
 
-        // The actual CodeMirror UI is injected as the next sibling by connectedCallback
-        el.style.display = 'none'
-        const cm = el.nextElementSibling
-        if (cm) {
-          cm.style.position = 'absolute'
-          cm.style.inset = '0'
+    if (isPlaying) {
+      dot.className = 'pulse'
+      statusLabel.textContent = 'Playing'
+    } else if (isConnected) {
+      dot.className = 'ok'
+      statusLabel.textContent = 'Connected'
+    } else {
+      dot.className = ''
+      statusLabel.textContent = 'Disconnected'
+    }
+  }
+
+  function showError(msg) {
+    errorBar.textContent = msg
+    errorBar.style.display = 'block'
+  }
+
+  function clearError() {
+    errorBar.style.display = 'none'
+  }
+
+  async function doPlay() {
+    if (!editor || isPlaying) return
+    try {
+      await editor.evaluate(true)
+      isPlaying = true
+      clearError()
+      updateButtons()
+      vscode.postMessage({ type: 'state', playing: true })
+    } catch (err) {
+      const message = String(err && err.message ? err.message : err)
+      showError(message)
+      vscode.postMessage({ type: 'error', message })
+    }
+  }
+
+  async function doStop() {
+    if (!editor || !isPlaying) return
+    await editor.stop()
+    isPlaying = false
+    clearError()
+    updateButtons()
+    vscode.postMessage({ type: 'state', playing: false })
+  }
+
+  btnPlay.addEventListener('click', doPlay)
+  btnStop.addEventListener('click', doStop)
+
+  customElements.whenDefined('strudel-editor').then(function () {
+    const el = document.getElementById('se')
+    if (!el || !el.editor) return
+    editor = el.editor
+
+    el.style.display = 'none'
+    const cm = el.nextElementSibling
+    if (cm) {
+      cm.style.position = 'absolute'
+      cm.style.inset = '0'
+    }
+
+    editorReady = true
+    updateButtons()
+    vscode.postMessage({ type: 'ready' })
+
+    // Sync manual edits back to extension host
+    let lastCode = editor.code
+    let debounce = null
+    setInterval(function () {
+      const code = editor.code
+      if (code === lastCode) return
+      lastCode = code
+      clearTimeout(debounce)
+      debounce = setTimeout(function () {
+        vscode.postMessage({ type: 'code_changed', code })
+      }, 800)
+    }, 1000)
+  })
+
+  window.addEventListener('message', async function (event) {
+    const msg = event.data
+    if (!msg) return
+
+    if (msg.type === 'ui_state') {
+      isConnected = msg.connected
+      isPlaying = msg.playing
+      if (msg.patternName) patternNameEl.textContent = msg.patternName
+      if (msg.error) showError(msg.error)
+      else clearError()
+      updateButtons()
+      return
+    }
+
+    if (!editor) return
+
+    if (msg.type === 'pattern') {
+      editor.setCode(msg.code)
+      if (msg.name) patternNameEl.textContent = msg.name
+      if (isPlaying) {
+        try {
+          await editor.evaluate(true)
+          clearError()
+          vscode.postMessage({ type: 'cleared' })
+        } catch (err) {
+          const message = String(err && err.message ? err.message : err)
+          showError(message)
+          vscode.postMessage({ type: 'error', message })
         }
-
-        // Sync manual edits back to extension host
-        let lastCode = editor.code
-        let debounce = null
-        setInterval(function () {
-          const code = editor.code
-          if (code === lastCode) return
-          lastCode = code
-          clearTimeout(debounce)
-          debounce = setTimeout(function () {
-            vscode.postMessage({ type: 'code_changed', code: code })
-          }, 800)
-        }, 1000)
-      })
-
-      window.addEventListener('message', async function (event) {
-        const msg = event.data
-        if (!msg || !editor) return
-
-        if (msg.type === 'pattern') {
-          editor.setCode(msg.code)
-          if (isPlaying) {
-            try {
-              await editor.evaluate(true)
-              clearError()
-              vscode.postMessage({ type: 'cleared' })
-            } catch (err) {
-              const message = String(err && err.message ? err.message : err)
-              showError(message)
-              vscode.postMessage({ type: 'error', message: message })
-            }
-          }
-        } else if (msg.type === 'play') {
-          try {
-            await editor.evaluate(true)
-            isPlaying = true
-            clearError()
-            vscode.postMessage({ type: 'state', playing: true })
-          } catch (err) {
-            const message = String(err && err.message ? err.message : err)
-            showError(message)
-            vscode.postMessage({ type: 'error', message: message })
-          }
-        } else if (msg.type === 'stop') {
-          await editor.stop()
-          isPlaying = false
-          vscode.postMessage({ type: 'state', playing: false })
-        }
-      })
-    })()
-  </script>
+      }
+    } else if (msg.type === 'play') {
+      await doPlay()
+    } else if (msg.type === 'stop') {
+      await doStop()
+    }
+  })
+})()
+</script>
 </body>
 </html>
