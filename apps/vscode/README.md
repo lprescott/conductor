@@ -34,9 +34,17 @@ The daemon exposes these tools to MCP clients:
 
 Browsers (and webviews) block audio until a user gesture. Click anywhere inside the editor panel before the first play so the AudioContext can resume.
 
+## Pattern library
+
+Saved patterns live in `<workspace>/patterns/*.js`, scoped per workspace. If you save a pattern in workspace A it will not appear in workspace B. With no folder open, patterns fall back to the extension's global storage.
+
+## Port handling
+
+The daemon prefers port `7777`. If it's busy (another VS Code window, another app) it falls back to an ephemeral port chosen by the OS. Run `Conductor: Add .mcp.json to Workspace` after activation to drop a `.mcp.json` pointing at the live URL so external MCP clients can find it.
+
 ## Configuration
 
-- `conductor.serverUrl` — daemon base URL (default `http://localhost:7777`). Change this only if you're running the daemon on a custom port.
+- `conductor.serverUrl` — probed first on activation; if `/health` answers, the extension adopts that URL instead of spawning a daemon. Useful for pointing at a remote or pre-started instance.
 
 ## Support
 

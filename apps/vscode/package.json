@@ -2,13 +2,17 @@
   "name": "conductor-vscode",
   "displayName": "Conductor",
   "description": "Live Strudel coding from VS Code — AI-ready MCP bridge",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "publisher": "lprescott",
   "license": "AGPL-3.0-or-later",
   "sponsor": { "url": "https://buymeacoffee.com/lprescott" },
   "engines": { "vscode": "^1.90.0" },
-  "categories": ["Other"],
+  "categories": ["Other", "Notebooks"],
   "keywords": ["strudel", "live coding", "music", "mcp", "ai", "algorave"],
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -76,7 +80,7 @@
   "activationEvents": [
     "onCustomEditor:conductor.strudelEditor",
     "workspaceContains:**/*.strudel",
-    "workspaceContains:.mcp.json",
+    "workspaceContains:patterns/*.js",
     "onCommand:conductor.startDaemon",
     "onCommand:conductor.newSong",
     "onCommand:conductor.initMcp",
