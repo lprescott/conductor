@@ -54,6 +54,14 @@ export class StrudelEditorProvider implements vscode.CustomTextEditorProvider {
       postPattern()
     })
 
+    // Save → re-evaluate. The webview's editor already mirrors the doc text via
+    // code_changed, so this is what makes a broken save surface an error and
+    // makes a valid save replace what's currently playing.
+    const saveSub = vscode.workspace.onDidSaveTextDocument((saved) => {
+      if (saved.uri.toString() !== document.uri.toString()) return
+      postPattern()
+    })
+
     const msgSub = panel.webview.onDidReceiveMessage((msg: WebviewInbound) => {
       if (msg.type === 'ready') {
         postPattern()
@@ -90,6 +98,7 @@ export class StrudelEditorProvider implements vscode.CustomTextEditorProvider {
         StrudelEditorProvider.activePanel = undefined
       }
       docChangeSub.dispose()
+      saveSub.dispose()
       msgSub.dispose()
       viewStateSub.dispose()
     })

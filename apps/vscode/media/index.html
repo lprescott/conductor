@@ -252,6 +252,7 @@ window.addEventListener('unhandledrejection', (e) => {
   let isPlaying = false
   let pendingCode = null
   let pendingName = null
+  let lastCode = ''
 
   const btnPlay       = document.getElementById('btn-play')
   const btnStop       = document.getElementById('btn-stop')
@@ -382,7 +383,7 @@ window.addEventListener('unhandledrejection', (e) => {
     vscode.postMessage({ type: 'ready' })
 
     // Sync user edits in the codemirror back to the document.
-    let lastCode = editor.code
+    lastCode = editor.code
     let timer = null
     setInterval(() => {
       if (!editor) return
@@ -418,7 +419,10 @@ window.addEventListener('unhandledrejection', (e) => {
         pendingName = msg.name || pendingName
         return
       }
-      editor.setCode(msg.code)
+      if (editor.code !== msg.code) {
+        editor.setCode(msg.code)
+        lastCode = editor.code
+      }
       if (msg.name) patternNameEl.textContent = msg.name
       if (isPlaying) {
         try {
