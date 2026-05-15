@@ -113,6 +113,14 @@ wss.on('connection', (ws: WebSocket) => {
 // ── Start ──────────────────────────────────────────────────────────────────────
 const stopWatcher = startWatcher()
 
+httpServer.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[server] port ${PORT} already in use — kill the old process with:\n  fuser -k ${PORT}/tcp`)
+    process.exit(1)
+  }
+  throw err
+})
+
 httpServer.listen(PORT, HOST, () => {
   console.log(`[server] listening on http://${HOST}:${PORT}`)
   console.log(`[server] MCP endpoint: http://${HOST}:${PORT}/mcp`)
