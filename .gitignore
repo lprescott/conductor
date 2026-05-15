@@ -3,3 +3,6 @@ dist/
 .next/
 .env
 *.local
+out/
+*.vsix
+media/strudel.js
