@@ -136,3 +136,14 @@ const shutdown = (signal: string) => {
 }
 process.on('SIGINT', () => shutdown('SIGINT'))
 process.on('SIGTERM', () => shutdown('SIGTERM'))
+
+// Exit when the parent extension host dies. The harness around us (VS Code's
+// extension host) sometimes goes down with SIGKILL, which never reaches our
+// SIGTERM handler; without this poll the daemon orphans and holds :7777.
+const parentPid = Number(process.env.CONDUCTOR_PARENT_PID)
+if (parentPid > 0) {
+  setInterval(() => {
+    try { process.kill(parentPid, 0) }
+    catch { shutdown('parent-exit') }
+  }, 1000).unref()
+}

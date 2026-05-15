@@ -2,7 +2,7 @@
   "name": "conductor-vscode",
   "displayName": "Conductor",
   "description": "Live Strudel coding from VS Code — AI-ready MCP bridge",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "lprescott",
   "license": "AGPL-3.0-or-later",
   "sponsor": { "url": "https://buymeacoffee.com/lprescott" },

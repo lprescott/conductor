@@ -11,6 +11,7 @@ import type { WebviewInbound } from './strudelEditor'
 let client: ConductorClient
 let statusBar: vscode.StatusBarItem
 let daemonProcess: ChildProcess | undefined
+let daemonOutput: vscode.OutputChannel | undefined
 
 function probeDaemon(baseUrl: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -35,21 +36,24 @@ async function ensureDaemonRunning(context: vscode.ExtensionContext): Promise<bo
     ? path.join(workspaceFolder.uri.fsPath, 'patterns')
     : path.join(context.globalStorageUri.fsPath, 'patterns')
 
-  const output = vscode.window.createOutputChannel('Conductor Daemon')
-  context.subscriptions.push(output)
+  if (!daemonOutput) {
+    daemonOutput = vscode.window.createOutputChannel('Conductor Daemon')
+    context.subscriptions.push(daemonOutput)
+  }
 
   daemonProcess = spawn(process.execPath, [bundled], {
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',
       CONDUCTOR_PATTERNS_DIR: patternsDir,
+      CONDUCTOR_PARENT_PID: String(process.pid),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
-  daemonProcess.stdout?.on('data', (b: Buffer) => output.append(b.toString()))
-  daemonProcess.stderr?.on('data', (b: Buffer) => output.append(b.toString()))
+  daemonProcess.stdout?.on('data', (b: Buffer) => daemonOutput?.append(b.toString()))
+  daemonProcess.stderr?.on('data', (b: Buffer) => daemonOutput?.append(b.toString()))
   daemonProcess.on('exit', (code) => {
-    output.appendLine(`[conductor] daemon exited (${code})`)
+    daemonOutput?.appendLine(`[conductor] daemon exited (${code})`)
     daemonProcess = undefined
   })
   context.subscriptions.push({ dispose: () => { daemonProcess?.kill() } })
@@ -58,7 +62,7 @@ async function ensureDaemonRunning(context: vscode.ExtensionContext): Promise<bo
     if (await probeDaemon(baseUrl)) return true
     await new Promise((r) => setTimeout(r, 100))
   }
-  output.appendLine('[conductor] daemon did not respond within 5s')
+  daemonOutput.appendLine('[conductor] daemon did not respond within 5s')
   return false
 }
 
@@ -157,9 +161,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       'Retry', 'Show Logs',
     ).then(async (choice) => {
       if (choice === 'Retry') await vscode.commands.executeCommand('conductor.startDaemon')
-      if (choice === 'Show Logs') {
-        vscode.commands.executeCommand('workbench.action.output.show.Conductor Daemon')
-      }
+      if (choice === 'Show Logs') daemonOutput?.show()
     })
   }
 
