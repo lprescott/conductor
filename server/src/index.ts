@@ -1,4 +1,6 @@
 import http from 'node:http'
+import net from 'node:net'
+import { writeFileSync, renameSync } from 'node:fs'
 import { WebSocketServer } from 'ws'
 import type WebSocket from 'ws'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
@@ -7,7 +9,7 @@ import {
   addClient, removeClient, setPlaying, setError, clearError, getState,
 } from './state.js'
 
-const PORT = Number(process.env.PORT) || 7777
+const PREFERRED_PORT = Number(process.env.PORT) || 7777
 const HOST = '127.0.0.1'
 
 function parseBody(req: http.IncomingMessage): Promise<unknown> {
@@ -27,10 +29,28 @@ function json(res: http.ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body))
 }
 
+// Daemon binds to 127.0.0.1 only, so the realistic attackers are pages that
+// the user has open in a browser. Allow MCP clients running on the same
+// machine (no Origin header, or http(s)://localhost / 127.0.0.1) and the
+// VS Code webview iframe (origin: vscode-webview://*). Reject everything else.
+function isAllowedOrigin(origin: string | undefined): boolean {
+  if (!origin || origin === 'null') return true
+  try {
+    const u = new URL(origin)
+    if (u.protocol === 'vscode-webview:') return true
+    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return true
+    return false
+  } catch { return false }
+}
+
 const httpServer = http.createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*')
+  const origin = req.headers.origin
+  if (isAllowedOrigin(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin ?? '*')
+    res.setHeader('Vary', 'Origin')
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Mcp-Session-Id')
 
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return }
 
@@ -111,18 +131,47 @@ async function handleWsMessage(raw: string): Promise<void> {
   }
 }
 
-httpServer.on('error', (err: NodeJS.ErrnoException) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`[server] port ${PORT} already in use — kill the old process with:\n  fuser -k ${PORT}/tcp`)
-    process.exit(1)
+function writePortFile(port: number): void {
+  const target = process.env.CONDUCTOR_PORT_FILE
+  if (!target) return
+  const tmp = `${target}.tmp`
+  try {
+    writeFileSync(tmp, String(port))
+    renameSync(tmp, target)
+  } catch (err) {
+    console.error('[server] failed to write port file:', err)
   }
-  throw err
+}
+
+httpServer.on('listening', () => {
+  const addr = httpServer.address()
+  const port = typeof addr === 'object' && addr ? addr.port : PREFERRED_PORT
+  console.log(`[server] listening on http://${HOST}:${port}`)
+  console.log(`[server] MCP endpoint: http://${HOST}:${port}/mcp`)
+  writePortFile(port)
 })
 
-httpServer.listen(PORT, HOST, () => {
-  console.log(`[server] listening on http://${HOST}:${PORT}`)
-  console.log(`[server] MCP endpoint: http://${HOST}:${PORT}/mcp`)
+httpServer.on('error', (err) => {
+  console.error('[server] runtime error:', err)
 })
+
+// Probe with a throwaway socket to decide preferred vs ephemeral. There's a
+// TOCTOU race against another process grabbing the port between probe and
+// bind, but in practice the daemon is the only thing aiming at PREFERRED_PORT.
+function probePortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const tester = net.createServer()
+    tester.once('error', () => resolve(false))
+    tester.once('listening', () => tester.close(() => resolve(true)))
+    tester.listen(port, HOST)
+  })
+}
+
+void (async () => {
+  const free = await probePortFree(PREFERRED_PORT)
+  if (!free) console.warn(`[server] port ${PREFERRED_PORT} in use, falling back to ephemeral`)
+  httpServer.listen(free ? PREFERRED_PORT : 0, HOST)
+})()
 
 // Keep the daemon alive on unexpected errors — the MCP client expects a long-lived process.
 process.on('uncaughtException', (err) => console.error('[uncaught]', err))
@@ -137,13 +186,10 @@ const shutdown = (signal: string) => {
 process.on('SIGINT', () => shutdown('SIGINT'))
 process.on('SIGTERM', () => shutdown('SIGTERM'))
 
-// Exit when the parent extension host dies. The harness around us (VS Code's
-// extension host) sometimes goes down with SIGKILL, which never reaches our
-// SIGTERM handler; without this poll the daemon orphans and holds :7777.
-const parentPid = Number(process.env.CONDUCTOR_PARENT_PID)
-if (parentPid > 0) {
-  setInterval(() => {
-    try { process.kill(parentPid, 0) }
-    catch { shutdown('parent-exit') }
-  }, 1000).unref()
+// Exit when our parent closes stdin. The extension host pipes stdin to us
+// and never writes to it; when the host dies (gracefully or not), the OS
+// closes the pipe and we get 'end' immediately — no PID poll, no race.
+if (process.env.CONDUCTOR_PARENT_STDIN === '1') {
+  process.stdin.on('end', () => shutdown('parent-stdin-closed'))
+  process.stdin.resume()
 }

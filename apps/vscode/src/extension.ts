@@ -12,8 +12,9 @@ let client: ConductorClient
 let statusBar: vscode.StatusBarItem
 let daemonProcess: ChildProcess | undefined
 let daemonOutput: vscode.OutputChannel | undefined
+let currentBaseUrl = ''
 
-function probeDaemon(baseUrl: string): Promise<boolean> {
+function probeUrl(baseUrl: string): Promise<boolean> {
   return new Promise((resolve) => {
     const req = http.get(`${baseUrl}/health`, { timeout: 500 }, (res) => {
       res.resume()
@@ -24,9 +25,25 @@ function probeDaemon(baseUrl: string): Promise<boolean> {
   })
 }
 
+function configuredUrl(): string {
+  return vscode.workspace.getConfiguration('conductor').get<string>('serverUrl', 'http://127.0.0.1:7777')
+}
+
+function readPortFile(portFile: string): number | undefined {
+  try {
+    const raw = fs.readFileSync(portFile, 'utf8').trim()
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0 ? n : undefined
+  } catch { return undefined }
+}
+
 async function ensureDaemonRunning(context: vscode.ExtensionContext): Promise<boolean> {
-  const baseUrl = serverUrl()
-  if (await probeDaemon(baseUrl)) return true
+  // 1) If something already answers at the user-configured URL, adopt it.
+  const configured = configuredUrl()
+  if (await probeUrl(configured)) {
+    currentBaseUrl = configured
+    return true
+  }
 
   const bundled = path.join(context.extensionPath, 'media', 'daemon.cjs')
   if (!fs.existsSync(bundled)) return false // dev install — user runs pnpm dev:server
@@ -35,6 +52,11 @@ async function ensureDaemonRunning(context: vscode.ExtensionContext): Promise<bo
   const patternsDir = workspaceFolder
     ? path.join(workspaceFolder.uri.fsPath, 'patterns')
     : path.join(context.globalStorageUri.fsPath, 'patterns')
+
+  // 2) Clear any stale port file so we know the daemon actually wrote a fresh one.
+  await fs.promises.mkdir(context.globalStorageUri.fsPath, { recursive: true })
+  const portFile = path.join(context.globalStorageUri.fsPath, 'daemon.port')
+  try { await fs.promises.unlink(portFile) } catch { /* didn't exist */ }
 
   if (!daemonOutput) {
     daemonOutput = vscode.window.createOutputChannel('Conductor Daemon')
@@ -46,9 +68,10 @@ async function ensureDaemonRunning(context: vscode.ExtensionContext): Promise<bo
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',
       CONDUCTOR_PATTERNS_DIR: patternsDir,
-      CONDUCTOR_PARENT_PID: String(process.pid),
+      CONDUCTOR_PORT_FILE: portFile,
+      CONDUCTOR_PARENT_STDIN: '1',
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
   })
   daemonProcess.stdout?.on('data', (b: Buffer) => daemonOutput?.append(b.toString()))
   daemonProcess.stderr?.on('data', (b: Buffer) => daemonOutput?.append(b.toString()))
@@ -58,8 +81,16 @@ async function ensureDaemonRunning(context: vscode.ExtensionContext): Promise<bo
   })
   context.subscriptions.push({ dispose: () => { daemonProcess?.kill() } })
 
+  // 3) Wait for the daemon to write the port file and answer /health.
   for (let i = 0; i < 50; i++) {
-    if (await probeDaemon(baseUrl)) return true
+    const port = readPortFile(portFile)
+    if (port) {
+      const url = `http://127.0.0.1:${port}`
+      if (await probeUrl(url)) {
+        currentBaseUrl = url
+        return true
+      }
+    }
     await new Promise((r) => setTimeout(r, 100))
   }
   daemonOutput.appendLine('[conductor] daemon did not respond within 5s')
@@ -67,7 +98,7 @@ async function ensureDaemonRunning(context: vscode.ExtensionContext): Promise<bo
 }
 
 function serverUrl(): string {
-  return vscode.workspace.getConfiguration('conductor').get<string>('serverUrl', 'http://localhost:7777')
+  return currentBaseUrl || configuredUrl()
 }
 
 function renderStatusBar(): void {
@@ -292,8 +323,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         return
       }
       const mcpPath = path.join(folders[0].uri.fsPath, '.mcp.json')
+      if (!currentBaseUrl) {
+        vscode.window.showWarningMessage(
+          'Conductor: daemon is not running yet — .mcp.json would have a stale URL. Try again after activation finishes.'
+        )
+        return
+      }
       const content = JSON.stringify(
-        { mcpServers: { conductor: { type: 'http', url: `${serverUrl()}/mcp` } } },
+        { mcpServers: { conductor: { type: 'http', url: `${currentBaseUrl}/mcp` } } },
         null, 2
       ) + '\n'
       try {

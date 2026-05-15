@@ -2,7 +2,7 @@
   "name": "conductor-vscode",
   "displayName": "Conductor",
   "description": "Live Strudel coding from VS Code — AI-ready MCP bridge",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "publisher": "lprescott",
   "license": "AGPL-3.0-or-later",
   "sponsor": { "url": "https://buymeacoffee.com/lprescott" },
@@ -67,13 +67,21 @@
       "properties": {
         "conductor.serverUrl": {
           "type": "string",
-          "default": "http://localhost:7777",
-          "description": "Conductor daemon base URL (change if running on a non-default port)"
+          "default": "http://127.0.0.1:7777",
+          "description": "Probe this URL first; if it answers /health, adopt it instead of spawning a daemon. Useful for pointing at a remote or pre-started instance."
         }
       }
     }
   },
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onCustomEditor:conductor.strudelEditor",
+    "workspaceContains:**/*.strudel",
+    "workspaceContains:.mcp.json",
+    "onCommand:conductor.startDaemon",
+    "onCommand:conductor.newSong",
+    "onCommand:conductor.initMcp",
+    "onView:conductorPatterns"
+  ],
   "scripts": {
     "copy-strudel": "node -e \"require('fs').cpSync(require.resolve('@strudel/repl/dist/index.js'),'media/strudel.js')\"",
     "copy-license": "node -e \"require('fs').cpSync('../../LICENSE','LICENSE')\"",
@@ -88,6 +96,7 @@
     "package": "pnpm build && vsce package --no-dependencies"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@strudel/repl": "1.3.0",
     "ws": "^8.18.0"
   },

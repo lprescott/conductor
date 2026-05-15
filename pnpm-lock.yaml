@@ -14,6 +14,9 @@ importers:
 
   apps/vscode:
     dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@3.25.76)
       '@strudel/repl':
         specifier: 1.3.0
         version: 1.3.0(@codemirror/lint@6.9.6)(rollup@4.60.4)
