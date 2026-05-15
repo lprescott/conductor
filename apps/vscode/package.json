@@ -5,6 +5,7 @@
   "version": "0.2.0",
   "publisher": "conductor",
   "license": "AGPL-3.0-or-later",
+  "sponsor": { "url": "https://buymeacoffee.com/lprescott" },
   "engines": { "vscode": "^1.90.0" },
   "categories": ["Other"],
   "keywords": ["strudel", "live coding", "music", "mcp", "ai", "algorave"],

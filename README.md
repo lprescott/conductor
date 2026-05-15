@@ -55,6 +55,10 @@ For other AI IDEs, point them at:
 
 Browsers block audio until a user gesture. Click anywhere in the browser after opening the page before sending patterns from your IDE. Patterns sent before that first click will load silently.
 
+## Support
+
+If Conductor's useful to you, you can [buy me a coffee](https://buymeacoffee.com/lprescott).
+
 ## License
 
-AGPL-3.0 (required by `@strudel/repl`)
+AGPL-3.0-or-later (required by `@strudel/repl`).
