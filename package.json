@@ -4,11 +4,11 @@
   "packageManager": "pnpm@9.12.3",
   "type": "module",
   "scripts": {
-    "dev": "concurrently --names SERVER,WEB --prefix-colors cyan,magenta \"pnpm --filter server dev\" \"pnpm --filter web dev\"",
+    "dev": "concurrently --names SERVER,EXT --prefix-colors cyan,magenta \"pnpm --filter server dev\" \"pnpm --filter conductor-vscode dev\"",
     "dev:server": "pnpm --filter server dev",
-    "dev:web": "pnpm --filter web dev",
-    "build": "pnpm --filter server build && pnpm --filter web build",
-    "test": "pnpm --filter server test"
+    "dev:vscode": "pnpm --filter conductor-vscode dev",
+    "build": "pnpm --filter server build && pnpm --filter conductor-vscode build",
+    "test": "pnpm --filter server test && pnpm --filter conductor-vscode test"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-{{NONCE}}' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src * blob: data:; connect-src https: wss: blob:; font-src data: blob:; worker-src blob: 'self';">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; background: #1e1e2e; color: #cdd6f4; font-family: monospace; }
+    #error-bar {
+      display: none;
+      padding: 5px 12px;
+      background: #2d0a0a;
+      border-bottom: 1px solid #7a1a1a;
+      color: #ff6b6b;
+      font-size: 11px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    #wrap { position: relative; height: 100%; }
+    strudel-editor { display: none; }
+  </style>
+</head>
+<body>
+  <div id="error-bar"></div>
+  <div id="wrap">
+    <strudel-editor id="se"></strudel-editor>
+  </div>
+  <script nonce="{{NONCE}}" src="{{STRUDEL_URI}}"></script>
+  <script nonce="{{NONCE}}">
+    (function () {
+      const vscode = acquireVsCodeApi()
+      let editor = null
+      let isPlaying = false
+
+      const errorBar = document.getElementById('error-bar')
+      const wrap = document.getElementById('wrap')
+
+      function showError(msg) {
+        errorBar.textContent = msg
+        errorBar.style.display = 'block'
+        wrap.style.height = 'calc(100% - ' + errorBar.offsetHeight + 'px)'
+      }
+
+      function clearError() {
+        errorBar.style.display = 'none'
+        wrap.style.height = '100%'
+      }
+
+      customElements.whenDefined('strudel-editor').then(function () {
+        const el = document.getElementById('se')
+        if (!el || !el.editor) return
+        editor = el.editor
+
+        // The actual CodeMirror UI is injected as the next sibling by connectedCallback
+        el.style.display = 'none'
+        const cm = el.nextElementSibling
+        if (cm) {
+          cm.style.position = 'absolute'
+          cm.style.inset = '0'
+        }
+
+        // Sync manual edits back to extension host
+        let lastCode = editor.code
+        let debounce = null
+        setInterval(function () {
+          const code = editor.code
+          if (code === lastCode) return
+          lastCode = code
+          clearTimeout(debounce)
+          debounce = setTimeout(function () {
+            vscode.postMessage({ type: 'code_changed', code: code })
+          }, 800)
+        }, 1000)
+      })
+
+      window.addEventListener('message', async function (event) {
+        const msg = event.data
+        if (!msg || !editor) return
+
+        if (msg.type === 'pattern') {
+          editor.setCode(msg.code)
+          if (isPlaying) {
+            try {
+              await editor.evaluate(true)
+              clearError()
+              vscode.postMessage({ type: 'cleared' })
+            } catch (err) {
+              const message = String(err && err.message ? err.message : err)
+              showError(message)
+              vscode.postMessage({ type: 'error', message: message })
+            }
+          }
+        } else if (msg.type === 'play') {
+          try {
+            await editor.evaluate(true)
+            isPlaying = true
+            clearError()
+            vscode.postMessage({ type: 'state', playing: true })
+          } catch (err) {
+            const message = String(err && err.message ? err.message : err)
+            showError(message)
+            vscode.postMessage({ type: 'error', message: message })
+          }
+        } else if (msg.type === 'stop') {
+          await editor.stop()
+          isPlaying = false
+          vscode.postMessage({ type: 'state', playing: false })
+        }
+      })
+    })()
+  </script>
+</body>
+</html>

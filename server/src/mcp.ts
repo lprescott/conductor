@@ -2,15 +2,14 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { readFile, writeFile, readdir, unlink, mkdir } from 'node:fs/promises'
 import path from 'node:path'
-import { getState, setPattern, setPlaying, broadcast, clearError, suppressNextWatcherBroadcast } from './state.js'
+import { getState, setPattern, setPlaying, broadcast, broadcastExcept, clearError, suppressNextWatcherBroadcast } from './state.js'
 import { PATTERN_FILE, PATTERNS_DIR } from './watcher.js'
 
 async function ensurePatternsDir(): Promise<void> {
   await mkdir(PATTERNS_DIR, { recursive: true })
 }
 
-function patternPath(name: string): string {
-  // Sanitize: allow only word chars, hyphens, spaces
+export function patternPath(name: string): string {
   const safe = name.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-')
   if (!safe) throw new Error('Invalid pattern name')
   return path.join(PATTERNS_DIR, `${safe}.js`)
@@ -74,6 +73,7 @@ export function createMcpServer(): McpServer {
     'play',
     { description: 'Starts Strudel playback in the browser.' },
     async () => {
+      setPlaying(true)
       broadcast({ type: 'play' })
       return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] }
     }
@@ -175,7 +175,7 @@ const STRUDEL_DOCS = `
 - .slow(4)                  — quarter speed
 - .rev()                    — reverse
 - .every(4, x => x.fast(2))— every 4 cycles apply transform
-- .off(0.25, x => x.up(7)) — offset copy transposed
+- .off(0.25, x => x.fast(2)) — offset copy with transform (note: .up() is not available)
 
 ## Effects
 - .gain(0.8)                — volume multiplier

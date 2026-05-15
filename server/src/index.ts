@@ -7,7 +7,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { createMcpServer } from './mcp.js'
 import {
   addClient, removeClient, setPlaying, setError, clearError,
-  getState, broadcast, setPattern, suppressNextWatcherBroadcast,
+  getState, broadcast, broadcastExcept, setPattern, suppressNextWatcherBroadcast,
 } from './state.js'
 import { startWatcher, PATTERN_FILE, PATTERNS_DIR } from './watcher.js'
 
@@ -133,7 +133,7 @@ wss.on('connection', (ws: WebSocket) => {
   ws.send(JSON.stringify({ type: 'pattern', code: getState().pattern }))
 
   ws.on('message', (raw) => {
-    void handleWsMessage(raw.toString())
+    void handleWsMessage(ws, raw.toString())
   })
 
   ws.on('close', () => {
@@ -147,24 +147,28 @@ wss.on('connection', (ws: WebSocket) => {
   })
 })
 
-async function handleWsMessage(raw: string): Promise<void> {
+async function handleWsMessage(ws: WebSocket, raw: string): Promise<void> {
   try {
     const msg = JSON.parse(raw) as Record<string, unknown>
     switch (msg.type) {
       case 'state':
-        if (typeof msg.playing === 'boolean') setPlaying(msg.playing)
+        if (typeof msg.playing === 'boolean') {
+          setPlaying(msg.playing)
+          broadcastExcept(ws, { type: 'state', playing: msg.playing })
+        }
         break
       case 'error':
         if (typeof msg.message === 'string') {
           setError(msg.message)
-          console.error('[ws] browser eval error:', msg.message)
+          broadcastExcept(ws, { type: 'error', message: msg.message })
+          console.error('[ws] eval error:', msg.message)
         }
         break
       case 'cleared':
         clearError()
+        broadcastExcept(ws, { type: 'cleared' })
         break
       case 'code_changed':
-        // Browser editor was manually edited — sync state and persist to disk
         if (typeof msg.code === 'string' && msg.code.trim()) {
           setPattern(msg.code.trim())
           suppressNextWatcherBroadcast()

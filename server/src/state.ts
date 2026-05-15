@@ -63,6 +63,15 @@ export function broadcast(message: object): void {
   }
 }
 
+export function broadcastExcept(exclude: WebSocket, message: object): void {
+  const text = JSON.stringify(message)
+  for (const client of state.clients) {
+    if (client !== exclude && client.readyState === WsWebSocket.OPEN) {
+      client.send(text)
+    }
+  }
+}
+
 export function subscribeToStateChanges(listener: Listener): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)

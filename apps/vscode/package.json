@@ -1,0 +1,91 @@
+{
+  "name": "conductor-vscode",
+  "displayName": "Conductor",
+  "description": "Live Strudel coding from VS Code — AI-ready MCP bridge",
+  "version": "0.2.0",
+  "publisher": "conductor",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Other"],
+  "keywords": ["strudel", "live coding", "music", "mcp", "ai", "algorave"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "conductor.openPanel",      "title": "Conductor: Open Strudel Panel" },
+      { "command": "conductor.play",           "title": "Conductor: Play",                    "icon": "$(play)" },
+      { "command": "conductor.stop",           "title": "Conductor: Stop",                    "icon": "$(debug-stop)" },
+      { "command": "conductor.togglePlay",     "title": "Conductor: Toggle Play/Stop" },
+      { "command": "conductor.pushPattern",    "title": "Conductor: Push Pattern to Conductor", "icon": "$(cloud-upload)" },
+      { "command": "conductor.savePattern",    "title": "Conductor: Save Pattern",            "icon": "$(save)" },
+      { "command": "conductor.loadPattern",    "title": "Conductor: Load Pattern..." },
+      { "command": "conductor.deletePattern",  "title": "Conductor: Delete Pattern",          "icon": "$(trash)" },
+      { "command": "conductor.refreshPatterns","title": "Conductor: Refresh Patterns",        "icon": "$(refresh)" },
+      { "command": "conductor.initMcp",        "title": "Conductor: Add .mcp.json to Workspace" }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "conductorPatterns",
+          "name": "Conductor Patterns"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        { "command": "conductor.refreshPatterns", "when": "view == conductorPatterns", "group": "navigation" },
+        { "command": "conductor.savePattern",     "when": "view == conductorPatterns", "group": "navigation" }
+      ],
+      "view/item/context": [
+        { "command": "conductor.deletePattern", "when": "view == conductorPatterns && viewItem == pattern", "group": "inline" }
+      ],
+      "editor/title": [
+        { "command": "conductor.pushPattern", "when": "resourceExtname == .js || resourceExtname == .ts", "group": "navigation" }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "conductor.pushPattern",
+        "key": "ctrl+shift+enter",
+        "mac": "cmd+shift+enter",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "conductor.togglePlay",
+        "key": "ctrl+shift+space",
+        "mac": "cmd+shift+space"
+      }
+    ],
+    "configuration": {
+      "title": "Conductor",
+      "properties": {
+        "conductor.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:7777",
+          "description": "Conductor daemon base URL (change if running on a non-default port)"
+        }
+      }
+    }
+  },
+  "activationEvents": ["onStartupFinished"],
+  "scripts": {
+    "copy-strudel": "node -e \"require('fs').cpSync(require.resolve('@strudel/repl/dist/index.js'),'media/strudel.js')\"",
+    "prebuild": "pnpm copy-strudel",
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "pretest": "pnpm copy-strudel",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "package": "pnpm build && vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "@strudel/repl": "1.3.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "@types/ws": "^8.5.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "~5.7.3",
+    "vitest": "^3.1.4"
+  }
+}
