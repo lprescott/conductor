@@ -6,9 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
     "bundle": "esbuild src/index.ts --bundle --outfile=dist/daemon.cjs --platform=node --format=cjs --target=node20",
-    "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

@@ -13,6 +13,7 @@ export type WebviewInbound =
 export interface StrudelEditorHooks {
   onWebviewMessage: (msg: WebviewInbound) => void
   onDocumentActive: (document: vscode.TextDocument) => void
+  onDocumentSaved: (document: vscode.TextDocument) => void
 }
 
 export class StrudelEditorProvider implements vscode.CustomTextEditorProvider {
@@ -54,12 +55,13 @@ export class StrudelEditorProvider implements vscode.CustomTextEditorProvider {
       postPattern()
     })
 
-    // Save → re-evaluate. Typing in the codemirror only mirrors to the doc;
-    // playback keeps the old pattern until save, which is how you avoid mid-edit
-    // glitches.
+    // Save → re-evaluate the webview AND push the new code to the daemon.
+    // Typing in the codemirror only mirrors to the doc; playback keeps the old
+    // pattern until save, which is how you avoid mid-edit glitches.
     const saveSub = vscode.workspace.onDidSaveTextDocument((saved) => {
       if (saved.uri.toString() !== document.uri.toString()) return
       void panel.webview.postMessage({ type: 'evaluate' })
+      this.hooks.onDocumentSaved(document)
     })
 
     const msgSub = panel.webview.onDidReceiveMessage((msg: WebviewInbound) => {

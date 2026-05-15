@@ -8,7 +8,7 @@
     "dev": "concurrently --names SERVER,EXT --prefix-colors cyan,magenta \"pnpm --filter server dev\" \"pnpm --filter conductor-vscode dev\"",
     "dev:server": "pnpm --filter server dev",
     "dev:vscode": "pnpm --filter conductor-vscode dev",
-    "build": "pnpm --filter server build && pnpm --filter conductor-vscode build",
+    "build": "pnpm --filter server bundle && pnpm --filter conductor-vscode build",
     "test": "pnpm --filter server test && pnpm --filter conductor-vscode test"
   },
   "devDependencies": {

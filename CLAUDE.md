@@ -24,7 +24,7 @@ cd apps/vscode && pnpm typecheck
 
 # Package and install the VS Code extension
 cd apps/vscode && pnpm package
-code --install-extension conductor-vscode-0.2.0.vsix --force
+code --install-extension conductor-vscode-*.vsix --force
 
 # Kill stale dev processes
 fuser -k 7777/tcp
@@ -61,6 +61,12 @@ daemon via the `set_pattern` MCP tool so external MCP callers see the current pa
 webview also notifies the daemon of `state` / `error` / `cleared` events over WebSocket so the
 daemon's `get_state` stays accurate.
 
+On extension activation, `ensureDaemonRunning()` probes `/health`; if no daemon answers, it
+spawns the bundled `media/daemon.cjs` as a child process (log output goes to the
+"Conductor Daemon" output channel). The patterns directory is passed via
+`CONDUCTOR_PATTERNS_DIR`, defaulting to `<workspace>/patterns`. `pnpm dev:server` is preferred
+in this repo because tsx watch-reloads; auto-spawn is the end-user path.
+
 ### Server (`server/src/`)
 
 - **`state.ts`** — singleton holding `{ pattern, playing, error, clients }` plus subscribe-style
@@ -82,20 +88,26 @@ daemon's `get_state` stays accurate.
   `*.strudel` files (registered via the `customEditors` contribution). Each open `.strudel`
   document gets its own webview built from `media/index.html` (template substitutes `{{NONCE}}`
   and `{{STRUDEL_URI}}`). On `ready` / view-state-active, calls `onDocumentActive(doc)` which
-  pushes the file's contents to the daemon as the live pattern and sets `lastPushedUri`.
-  Webview `code_changed` messages are applied to the document via `WorkspaceEdit` (with a
-  suppression flag to avoid echo). The static `StrudelEditorProvider.activePanel` tracks the
-  most-recently-active webview so play/stop commands can post into it.
-- **`src/extension.ts`** — `activate()` wires everything together. Key state: `lastPushedUri`
-  (auto-push target on file save). The `play`/`stop`/`togglePlay` commands call the daemon and
-  forward `play`/`stop` messages to `StrudelEditorProvider.activePanel`. The save watcher
-  auto-pushes `lastPushedUri` on every save.
+  pushes the file's contents to the daemon. Webview `code_changed` messages are applied to the
+  document via `WorkspaceEdit` (with a suppression flag to avoid echo). On save, the per-doc
+  listener posts `{ type: 'evaluate' }` to the webview so playback re-runs the new code. The
+  static `StrudelEditorProvider.activePanel` tracks the most-recently-active webview so
+  play/stop commands can post into it.
+- **`src/extension.ts`** — `activate()` wires everything together. `ensureDaemonRunning()` runs
+  first (probes `/health`, spawns the bundled daemon if offline). `pushDocToDaemon(doc)` sends
+  the doc's contents over MCP `set_pattern`; the editor provider calls it via the
+  `onDocumentActive` and `onDocumentSaved` hooks. The `play`/`stop`/`togglePlay` commands call
+  the daemon and forward `play`/`stop` messages to `StrudelEditorProvider.activePanel`.
+  `conductor.startDaemon` re-invokes `ensureDaemonRunning` (used when the auto-spawn lost a
+  race or the port was held).
 - **`src/patternsProvider.ts`** — `PatternProvider` tree data provider for the Conductor Patterns
   sidebar. Single-click on a pattern loads it.
 - **`media/index.html`** — Strudel webview. Toolbar uses VS Code CSS variables for theming.
   Sends `ready` on editor init. Sends `state` / `error` / `cleared` / `code_changed` messages
   back to the extension host. Receives `pattern` / `play` / `stop` messages.
 - **`media/strudel.js`** — bundled `@strudel/repl` IIFE (2 MB, gitignored, copied at build time).
+- **`media/daemon.cjs`** — esbuild-bundled daemon (gitignored, copied from `server/dist/daemon.cjs`
+  at package time). Shipped inside the `.vsix` so end users don't need pnpm or the monorepo.
 
 ### MCP endpoint
 

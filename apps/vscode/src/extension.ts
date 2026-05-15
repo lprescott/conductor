@@ -10,7 +10,6 @@ import type { WebviewInbound } from './strudelEditor'
 
 let client: ConductorClient
 let statusBar: vscode.StatusBarItem
-let lastPushedUri: vscode.Uri | undefined
 let daemonProcess: ChildProcess | undefined
 
 function probeDaemon(baseUrl: string): Promise<boolean> {
@@ -117,10 +116,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.registerTreeDataProvider('conductorPatterns', patternProvider)
   )
 
-  const onStrudelDocumentActive = async (doc: vscode.TextDocument) => {
+  const pushDocToDaemon = async (doc: vscode.TextDocument): Promise<void> => {
     const code = doc.getText().trim()
     if (!code) return
-    lastPushedUri = doc.uri
     try {
       await client.setPattern(code)
     } catch { /* daemon offline — status bar already reflects */ }
@@ -132,7 +130,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       StrudelEditorProvider.viewType,
       new StrudelEditorProvider(context.extensionUri, {
         onWebviewMessage: handleWebviewMessage,
-        onDocumentActive: (doc) => { void onStrudelDocumentActive(doc) },
+        onDocumentActive: (doc) => { void pushDocToDaemon(doc) },
+        onDocumentSaved: (doc) => { void pushDocToDaemon(doc) },
       }),
       { webviewOptions: { retainContextWhenHidden: true } }
     )
@@ -159,19 +158,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (choice === 'Start Daemon') vscode.commands.executeCommand('conductor.startDaemon')
     })
   }
-
-  // Auto-push on save of the most recently activated .strudel doc
-  context.subscriptions.push(
-    vscode.workspace.onDidSaveTextDocument(async (doc) => {
-      if (!lastPushedUri) return
-      if (doc.uri.toString() !== lastPushedUri.toString()) return
-      const code = doc.getText().trim()
-      if (!code) return
-      try {
-        await client.setPattern(code)
-      } catch { /* status bar already shows disconnected */ }
-    })
-  )
 
   context.subscriptions.push(
 
@@ -232,17 +218,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       await vscode.commands.executeCommand('vscode.openWith', fileUri, StrudelEditorProvider.viewType)
     }),
 
-    vscode.commands.registerCommand('conductor.startDaemon', () => {
-      const folder = vscode.workspace.workspaceFolders?.[0]
-      if (!folder) {
-        vscode.window.showWarningMessage('Conductor: open the conductor workspace first.')
-        return
-      }
-      const name = 'Conductor Daemon'
-      const existing = vscode.window.terminals.find((t) => t.name === name)
-      const terminal = existing ?? vscode.window.createTerminal({ name, cwd: folder.uri.fsPath })
-      terminal.show()
-      if (!existing) terminal.sendText('pnpm dev:server', true)
+    vscode.commands.registerCommand('conductor.startDaemon', async () => {
+      await ensureDaemonRunning(context)
+      renderStatusBar()
     }),
 
     vscode.commands.registerCommand('conductor.savePattern', async () => {
