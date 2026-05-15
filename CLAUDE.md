@@ -33,8 +33,8 @@ fuser -k 7777/tcp
 ## Pattern library
 
 Saved patterns live in `patterns/` at the repo root as plain `.js` files. Create them via the
-`save_pattern` MCP tool or the `Conductor: Save Pattern` command. The extension's Conductor
-Patterns sidebar (Explorer) fetches via `GET /patterns` and loads via `GET /patterns/:name`.
+`save_pattern` MCP tool or the `Conductor: Save Pattern` command. The Conductor Patterns sidebar
+in Explorer lists them via the `list_patterns` MCP tool; single-click loads via `load_pattern`.
 
 ## Architecture
 
@@ -44,48 +44,39 @@ packages connected at runtime.
 ### Data flow
 
 ```
-AI IDE ──MCP HTTP POST /mcp──► server/src/index.ts
-                                     │
-                     ┌───────────────┴───────────────┐
-                     │ state.ts (singleton)           │
-                     └───────────────┬───────────────┘
-                                     │ broadcast()
-                                WebSocket (:7777)
-                                     │
-                          ConductorClient (extension host)
-                                     │ postMessage
-                              Strudel webview panel
-                                     │
-                              <strudel-editor>
-                              (StrudelMirror API)
+AI IDE ──MCP HTTP POST /mcp──► server/src/index.ts ──► state.ts
+                                                          ▲
+                                                          │ ws state/error/cleared
+                                                          │
+VS Code  ──opens *.strudel──► StrudelEditorProvider ──► <strudel-editor>
+                                  (per-doc webview)     (StrudelMirror API)
 ```
 
-Pattern state flows one way: MCP tool or file change → `state.ts` → WebSocket broadcast →
-extension host → webview postMessage → Strudel evaluates. Browser state (playing, errors, manual
-edits) flows back over the same WebSocket via the extension host relay.
+Each `.strudel` document gets its own webview. The webview's text content lives in the file
+(synced via `WorkspaceEdit`). When a document becomes active, its content is pushed to the
+daemon via the `set_pattern` MCP tool so external MCP callers see the current pattern. The
+webview also notifies the daemon of `state` / `error` / `cleared` events over WebSocket so the
+daemon's `get_state` stays accurate.
 
 ### Server (`server/src/`)
 
-- **`state.ts`** — singleton holding `{ pattern, playing, error, clients }`. Exports
-  `suppressNextWatcherBroadcast()` to prevent the file watcher from re-broadcasting a write that
-  the daemon itself initiated.
+- **`state.ts`** — singleton holding `{ pattern, playing, error, clients }` plus subscribe-style
+  listeners.
 - **`watcher.ts`** — exports `REPO_ROOT`, `PATTERN_FILE`, `PATTERNS_DIR`. Chokidar watches
-  `pattern.js`; on change checks `shouldSuppressWatcherBroadcast()` before broadcasting.
+  `pattern.js` and updates `state.pattern` on add/change.
 - **`mcp.ts`** — exports `createMcpServer()` factory (fresh per HTTP request). Tools:
   `get_pattern`, `set_pattern`, `get_state`, `play`, `stop`, `save_pattern`, `list_patterns`,
-  `load_pattern`, `delete_pattern`, `get_strudel_docs`. `set_pattern` and `load_pattern` both
-  write to `pattern.js` with suppression.
-- **`index.ts`** — HTTP server: `/mcp` (MCP/SSE), `/health`, `/patterns` REST (GET list, GET by
-  name, POST load), and WebSocket upgrades. `handleWsMessage()` handles: `state`, `error`,
-  `cleared`, `code_changed` (manual webview edits → write `pattern.js` with suppression).
-  `broadcastExcept(ws, msg)` relays messages to all other connected WS clients.
+  `load_pattern`, `delete_pattern`, `get_strudel_docs`. `set_pattern` and `load_pattern` write
+  to `pattern.js`.
+- **`index.ts`** — HTTP server: `/mcp` (MCP/SSE), `/health`, and WebSocket upgrades.
+  `handleWsMessage()` handles `state`, `error`, `cleared` (the webview's playback/error events).
 
 ### VS Code extension (`apps/vscode/`)
 
-- **`src/client.ts`** — `ConductorClient extends EventEmitter`. Maintains a WebSocket to the
-  daemon with auto-reconnect (3 s delay). Emits `connected`, `disconnected`, `message`. HTTP MCP
-  methods: `fetchState`, `setPattern`, `play`, `stop`, `savePattern`, `loadPattern`,
-  `deletePattern`, `listPatterns`.
+- **`src/client.ts`** — `ConductorClient extends EventEmitter`. Opens a WebSocket to the daemon
+  with 3-second auto-reconnect; emits `connected` / `disconnected`. HTTP MCP methods:
+  `fetchState`, `setPattern`, `play`, `stop`, `savePattern`, `loadPattern`, `deletePattern`,
+  `listPatterns`. `send(msg)` forwards a JSON message over the open WebSocket.
 - **`src/strudelEditor.ts`** — `StrudelEditorProvider` implements `CustomTextEditorProvider` for
   `*.strudel` files (registered via the `customEditors` contribution). Each open `.strudel`
   document gets its own webview built from `media/index.html` (template substitutes `{{NONCE}}`
@@ -101,8 +92,8 @@ edits) flows back over the same WebSocket via the extension host relay.
 - **`src/patternsProvider.ts`** — `PatternProvider` tree data provider for the Conductor Patterns
   sidebar. Single-click on a pattern loads it.
 - **`media/index.html`** — Strudel webview. Toolbar uses VS Code CSS variables for theming.
-  Sends `ready` on editor init; receives `ui_state` to sync toolbar. Sends `state`/`error`/
-  `cleared`/`code_changed` messages back to the extension host.
+  Sends `ready` on editor init. Sends `state` / `error` / `cleared` / `code_changed` messages
+  back to the extension host. Receives `pattern` / `play` / `stop` messages.
 - **`media/strudel.js`** — bundled `@strudel/repl` IIFE (2 MB, gitignored, copied at build time).
 
 ### MCP endpoint
@@ -112,5 +103,5 @@ SSE-framed even for simple tool calls.
 
 ### `pattern.js`
 
-The live pattern file at the repo root. The watcher reads it on every save and broadcasts to all
-connected WS clients. Written by `set_pattern` and `load_pattern` with suppression enabled.
+The daemon's view of the live pattern, kept at the repo root. The watcher reads it on every
+change and updates `state.pattern`. Written by `set_pattern` and `load_pattern`.

@@ -1,5 +1,4 @@
 import type WebSocket from 'ws'
-import { WebSocket as WsWebSocket } from 'ws'
 
 export interface AppState {
   pattern: string
@@ -54,36 +53,7 @@ export function removeClient(ws: WebSocket): void {
   state.clients.delete(ws)
 }
 
-export function broadcast(message: object): void {
-  const text = JSON.stringify(message)
-  for (const client of state.clients) {
-    if (client.readyState === WsWebSocket.OPEN) {
-      client.send(text)
-    }
-  }
-}
-
-export function broadcastExcept(exclude: WebSocket, message: object): void {
-  const text = JSON.stringify(message)
-  for (const client of state.clients) {
-    if (client !== exclude && client.readyState === WsWebSocket.OPEN) {
-      client.send(text)
-    }
-  }
-}
-
 export function subscribeToStateChanges(listener: Listener): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
-}
-
-// Prevents the watcher from echoing back a write we just made
-let suppressUntil = 0
-
-export function suppressNextWatcherBroadcast(): void {
-  suppressUntil = Date.now() + 500
-}
-
-export function shouldSuppressWatcherBroadcast(): boolean {
-  return Date.now() < suppressUntil
 }

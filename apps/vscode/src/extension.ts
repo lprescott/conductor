@@ -87,7 +87,6 @@ export function activate(context: vscode.ExtensionContext): void {
     void client.fetchState().then(renderStatusBar).catch(() => {})
   })
   client.on('disconnected', renderStatusBar)
-  client.on('message', () => renderStatusBar())
 
   renderStatusBar()
 

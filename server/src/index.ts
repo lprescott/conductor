@@ -1,15 +1,12 @@
 import http from 'node:http'
-import { readFile, writeFile, readdir } from 'node:fs/promises'
-import path from 'node:path'
 import { WebSocketServer } from 'ws'
 import type WebSocket from 'ws'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { createMcpServer } from './mcp.js'
 import {
-  addClient, removeClient, setPlaying, setError, clearError,
-  getState, broadcast, broadcastExcept, setPattern, suppressNextWatcherBroadcast,
+  addClient, removeClient, setPlaying, setError, clearError, getState,
 } from './state.js'
-import { startWatcher, PATTERN_FILE, PATTERNS_DIR } from './watcher.js'
+import { startWatcher } from './watcher.js'
 
 const PORT = Number(process.env.PORT) || 7777
 const HOST = '127.0.0.1'
@@ -31,7 +28,6 @@ function json(res: http.ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body))
 }
 
-// ── HTTP server ────────────────────────────────────────────────────────────────
 const httpServer = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
@@ -41,61 +37,12 @@ const httpServer = http.createServer(async (req, res) => {
 
   const url = req.url ?? '/'
 
-  // ── Health ──────────────────────────────────────────────────────────────────
   if (req.method === 'GET' && url === '/health') {
     const s = getState()
     json(res, 200, { status: 'ok', connectedClients: s.clients.size })
     return
   }
 
-  // ── Patterns REST ───────────────────────────────────────────────────────────
-
-  // GET /patterns — list saved pattern names
-  if (req.method === 'GET' && url === '/patterns') {
-    try {
-      const files = await readdir(PATTERNS_DIR).catch(() => [] as string[])
-      const names = files.filter(f => f.endsWith('.js')).map(f => f.slice(0, -3))
-      json(res, 200, { patterns: names })
-    } catch (err) {
-      json(res, 500, { error: String(err) })
-    }
-    return
-  }
-
-  // GET /patterns/:name — get a saved pattern's code
-  if (req.method === 'GET' && url.startsWith('/patterns/')) {
-    const name = decodeURIComponent(url.slice('/patterns/'.length))
-    const file = path.join(PATTERNS_DIR, `${name}.js`)
-    try {
-      const code = (await readFile(file, 'utf8')).trim()
-      json(res, 200, { name, code })
-    } catch {
-      json(res, 404, { error: 'Pattern not found' })
-    }
-    return
-  }
-
-  // POST /patterns/load — load a saved pattern and broadcast to browser
-  if (req.method === 'POST' && url === '/patterns/load') {
-    const body = await parseBody(req) as Record<string, unknown> | undefined
-    const name = typeof body?.name === 'string' ? body.name : null
-    if (!name) { json(res, 400, { error: 'name required' }); return }
-    const file = path.join(PATTERNS_DIR, `${name}.js`)
-    try {
-      const code = (await readFile(file, 'utf8')).trim()
-      setPattern(code)
-      clearError()
-      suppressNextWatcherBroadcast()
-      await writeFile(PATTERN_FILE, code, 'utf8')
-      broadcast({ type: 'pattern', code, name })
-      json(res, 200, { ok: true, name, code })
-    } catch {
-      json(res, 404, { error: 'Pattern not found' })
-    }
-    return
-  }
-
-  // ── MCP ─────────────────────────────────────────────────────────────────────
   if (url === '/mcp') {
     // Per-request instances required: connect() silently overwrites transport (SDK #1405)
     // and stateless transports cannot be reused (SDK #1994)
@@ -122,18 +69,14 @@ const httpServer = http.createServer(async (req, res) => {
   res.end('Not found')
 })
 
-// ── WebSocket server ───────────────────────────────────────────────────────────
 const wss = new WebSocketServer({ server: httpServer })
 
 wss.on('connection', (ws: WebSocket) => {
   addClient(ws)
   console.log(`[ws] client connected (total: ${getState().clients.size})`)
 
-  // Hydrate the new client with the current pattern immediately
-  ws.send(JSON.stringify({ type: 'pattern', code: getState().pattern }))
-
   ws.on('message', (raw) => {
-    void handleWsMessage(ws, raw.toString())
+    void handleWsMessage(raw.toString())
   })
 
   ws.on('close', () => {
@@ -147,35 +90,21 @@ wss.on('connection', (ws: WebSocket) => {
   })
 })
 
-async function handleWsMessage(ws: WebSocket, raw: string): Promise<void> {
+async function handleWsMessage(raw: string): Promise<void> {
   try {
     const msg = JSON.parse(raw) as Record<string, unknown>
     switch (msg.type) {
       case 'state':
-        if (typeof msg.playing === 'boolean') {
-          setPlaying(msg.playing)
-          broadcastExcept(ws, { type: 'state', playing: msg.playing })
-        }
+        if (typeof msg.playing === 'boolean') setPlaying(msg.playing)
         break
       case 'error':
         if (typeof msg.message === 'string') {
           setError(msg.message)
-          broadcastExcept(ws, { type: 'error', message: msg.message })
           console.error('[ws] eval error:', msg.message)
         }
         break
       case 'cleared':
         clearError()
-        broadcastExcept(ws, { type: 'cleared' })
-        break
-      case 'code_changed':
-        if (typeof msg.code === 'string' && msg.code.trim()) {
-          setPattern(msg.code.trim())
-          suppressNextWatcherBroadcast()
-          await writeFile(PATTERN_FILE, msg.code.trim(), 'utf8').catch(err =>
-            console.error('[ws] failed to persist code_changed:', err)
-          )
-        }
         break
     }
   } catch {
@@ -183,7 +112,6 @@ async function handleWsMessage(ws: WebSocket, raw: string): Promise<void> {
   }
 }
 
-// ── Start ──────────────────────────────────────────────────────────────────────
 const stopWatcher = startWatcher()
 
 httpServer.on('error', (err: NodeJS.ErrnoException) => {

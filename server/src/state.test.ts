@@ -6,8 +6,6 @@ import {
   setError,
   clearError,
   subscribeToStateChanges,
-  suppressNextWatcherBroadcast,
-  shouldSuppressWatcherBroadcast,
 } from './state.js'
 
 describe('state module', () => {
@@ -54,22 +52,5 @@ describe('state module', () => {
     unsub()
     setPattern("note('a3')")
     expect(calls).toEqual(["note('g3')"])
-  })
-})
-
-describe('watcher suppression', () => {
-  it('returns false before any suppression', () => {
-    expect(shouldSuppressWatcherBroadcast()).toBe(false)
-  })
-
-  it('returns true immediately after suppressNextWatcherBroadcast', () => {
-    suppressNextWatcherBroadcast()
-    expect(shouldSuppressWatcherBroadcast()).toBe(true)
-  })
-
-  it('returns false after the 500ms window has elapsed', async () => {
-    suppressNextWatcherBroadcast()
-    await new Promise((r) => setTimeout(r, 510))
-    expect(shouldSuppressWatcherBroadcast()).toBe(false)
   })
 })

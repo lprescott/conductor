@@ -76,30 +76,6 @@
       margin: 0 4px;
     }
 
-    #status-group { display: flex; align-items: center; gap: 5px; }
-
-    #dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      flex-shrink: 0;
-      background: var(--vscode-editorError-foreground, #f48771);
-    }
-    #dot.ok    { background: #4ec9b0; }
-    #dot.pulse {
-      background: #4ec9b0;
-      animation: beat 0.9s ease-in-out infinite;
-    }
-    @keyframes beat {
-      0%, 100% { transform: scale(1);   opacity: 1; }
-      50%       { transform: scale(1.5); opacity: 0.6; }
-    }
-
-    #status-label {
-      font-size: 11px;
-      color: var(--vscode-descriptionForeground, #8b949e);
-    }
-
     #pattern-name {
       font-size: 11px;
       font-weight: 600;
@@ -167,11 +143,6 @@
     <button id="btn-play" class="tbtn" title="Play (Cmd/Ctrl+Shift+Space)" disabled>&#x25BA; Play</button>
     <button id="btn-stop" class="tbtn" title="Stop" disabled>&#x25A0; Stop</button>
     <div class="sep"></div>
-    <div id="status-group">
-      <div id="dot"></div>
-      <span id="status-label">Connecting&hellip;</span>
-    </div>
-    <div class="sep"></div>
     <span id="pattern-name">&mdash;</span>
     <div class="spacer"></div>
   </div>
@@ -193,12 +164,9 @@
   let editor = null
   let editorReady = false
   let isPlaying = false
-  let isConnected = false
 
   const btnPlay       = document.getElementById('btn-play')
   const btnStop       = document.getElementById('btn-stop')
-  const dot           = document.getElementById('dot')
-  const statusLabel   = document.getElementById('status-label')
   const patternNameEl = document.getElementById('pattern-name')
   const errorBar      = document.getElementById('error-bar')
   const loading       = document.getElementById('loading')
@@ -207,17 +175,6 @@
     btnPlay.disabled = !editorReady || isPlaying
     btnStop.disabled = !editorReady || !isPlaying
     btnStop.classList.toggle('live', isPlaying)
-
-    if (isPlaying) {
-      dot.className = 'pulse'
-      statusLabel.textContent = 'Playing'
-    } else if (isConnected) {
-      dot.className = 'ok'
-      statusLabel.textContent = 'Connected'
-    } else {
-      dot.className = ''
-      statusLabel.textContent = 'Disconnected'
-    }
   }
 
   function showError(msg) {
@@ -290,19 +247,7 @@
 
   window.addEventListener('message', async function (event) {
     const msg = event.data
-    if (!msg) return
-
-    if (msg.type === 'ui_state') {
-      isConnected = msg.connected
-      isPlaying = msg.playing
-      if (msg.patternName) patternNameEl.textContent = msg.patternName
-      if (msg.error) showError(msg.error)
-      else clearError()
-      updateButtons()
-      return
-    }
-
-    if (!editor) return
+    if (!msg || !editor) return
 
     if (msg.type === 'pattern') {
       editor.setCode(msg.code)

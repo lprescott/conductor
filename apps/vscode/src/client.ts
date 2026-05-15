@@ -8,28 +8,17 @@ export type ServerState = {
   connectedClients: number
 }
 
-export type ServerMessage =
-  | { type: 'pattern'; code: string; name?: string }
-  | { type: 'play' }
-  | { type: 'stop' }
-  | { type: 'state'; playing: boolean }
-  | { type: 'error'; message: string }
-  | { type: 'cleared' }
-
 type McpResponse = {
   result?: { content?: Array<{ type: string; text?: string }> }
   jsonrpc: string
   id: number
 }
 
-// Declaration merging for typed EventEmitter events
 export interface ConductorClient {
   on(event: 'connected',    listener: () => void): this
   on(event: 'disconnected', listener: () => void): this
-  on(event: 'message',      listener: (msg: ServerMessage) => void): this
   emit(event: 'connected'): boolean
   emit(event: 'disconnected'): boolean
-  emit(event: 'message', msg: ServerMessage): boolean
 }
 
 export class ConductorClient extends EventEmitter {
@@ -51,7 +40,7 @@ export class ConductorClient extends EventEmitter {
     this.state = { ...this.state, ...patch }
   }
 
-  // Forward a raw message to the daemon (e.g. webview → daemon relay)
+  // Forward a raw message to the daemon (webview state/error/cleared events)
   send(msg: object): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg))
@@ -73,14 +62,6 @@ export class ConductorClient extends EventEmitter {
         this.emit('connected')
       })
 
-      ws.on('message', (raw) => {
-        try {
-          const msg = JSON.parse(raw.toString()) as ServerMessage
-          this.applyMessage(msg)
-          this.emit('message', msg)
-        } catch { /* ignore malformed */ }
-      })
-
       ws.on('close', () => {
         this.connected = false
         this.ws = null
@@ -89,7 +70,6 @@ export class ConductorClient extends EventEmitter {
       })
 
       ws.on('error', () => {
-        // 'close' fires after 'error'; handle reconnect there
         this.connected = false
         this.emit('disconnected')
       })
@@ -104,14 +84,6 @@ export class ConductorClient extends EventEmitter {
       this.reconnectTimer = null
       this.connect()
     }, 3000)
-  }
-
-  private applyMessage(msg: ServerMessage): void {
-    if (msg.type === 'play')    this.state = { ...this.state, playing: true }
-    if (msg.type === 'stop')    this.state = { ...this.state, playing: false }
-    if (msg.type === 'state')   this.state = { ...this.state, playing: msg.playing }
-    if (msg.type === 'error')   this.state = { ...this.state, error: msg.message }
-    if (msg.type === 'cleared') this.state = { ...this.state, error: null }
   }
 
   // ── HTTP MCP calls ──────────────────────────────────────────────────────────

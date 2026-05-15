@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { readFile, writeFile, readdir, unlink, mkdir } from 'node:fs/promises'
 import path from 'node:path'
-import { getState, setPattern, setPlaying, broadcast, broadcastExcept, clearError, suppressNextWatcherBroadcast } from './state.js'
+import { getState, setPattern, setPlaying, clearError } from './state.js'
 import { PATTERN_FILE, PATTERNS_DIR } from './watcher.js'
 
 async function ensurePatternsDir(): Promise<void> {
@@ -23,7 +23,7 @@ export function createMcpServer(): McpServer {
 
   server.registerTool(
     'get_pattern',
-    { description: 'Returns the current Strudel pattern code playing in the browser.' },
+    { description: 'Returns the current Strudel pattern code.' },
     async () => ({
       content: [{ type: 'text', text: JSON.stringify({ code: getState().pattern }) }],
     })
@@ -32,14 +32,12 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     'set_pattern',
     {
-      description: 'Sets a new Strudel pattern. The browser updates live and music changes instantly. Also writes to pattern.js.',
+      description: 'Sets the active Strudel pattern and writes it to pattern.js.',
       inputSchema: { code: z.string().min(1).describe('Valid Strudel pattern code') },
     },
     async ({ code }) => {
       setPattern(code)
       clearError()
-      broadcast({ type: 'pattern', code })
-      suppressNextWatcherBroadcast()
       try {
         await writeFile(PATTERN_FILE, code, 'utf8')
       } catch (err) {
@@ -51,7 +49,7 @@ export function createMcpServer(): McpServer {
 
   server.registerTool(
     'get_state',
-    { description: 'Returns current playback state: whether audio is playing, any eval error, and browser client count.' },
+    { description: 'Returns current playback state: whether audio is playing, any eval error, and connected client count.' },
     async () => {
       const s = getState()
       return {
@@ -71,20 +69,18 @@ export function createMcpServer(): McpServer {
 
   server.registerTool(
     'play',
-    { description: 'Starts Strudel playback in the browser.' },
+    { description: 'Marks playback as started.' },
     async () => {
       setPlaying(true)
-      broadcast({ type: 'play' })
       return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] }
     }
   )
 
   server.registerTool(
     'stop',
-    { description: 'Stops Strudel playback in the browser.' },
+    { description: 'Marks playback as stopped.' },
     async () => {
       setPlaying(false)
-      broadcast({ type: 'stop' })
       return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] }
     }
   )
@@ -125,16 +121,14 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     'load_pattern',
     {
-      description: 'Loads a saved pattern by name, sets it as active, and broadcasts to the browser.',
+      description: 'Loads a saved pattern by name and sets it as the active pattern.',
       inputSchema: { name: z.string().min(1).describe('Name of the saved pattern to load') },
     },
     async ({ name }) => {
       const code = (await readFile(patternPath(name), 'utf8')).trim()
       setPattern(code)
       clearError()
-      suppressNextWatcherBroadcast()
       await writeFile(PATTERN_FILE, code, 'utf8')
-      broadcast({ type: 'pattern', code, name })
       return { content: [{ type: 'text', text: JSON.stringify({ ok: true, name, code }) }] }
     }
   )
