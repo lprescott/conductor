@@ -1,6 +1,20 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { getState, setPattern, setPlaying, broadcast, clearError } from './state.js'
+import { readFile, writeFile, readdir, unlink, mkdir } from 'node:fs/promises'
+import path from 'node:path'
+import { getState, setPattern, setPlaying, broadcast, clearError, suppressNextWatcherBroadcast } from './state.js'
+import { PATTERN_FILE, PATTERNS_DIR } from './watcher.js'
+
+async function ensurePatternsDir(): Promise<void> {
+  await mkdir(PATTERNS_DIR, { recursive: true })
+}
+
+function patternPath(name: string): string {
+  // Sanitize: allow only word chars, hyphens, spaces
+  const safe = name.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-')
+  if (!safe) throw new Error('Invalid pattern name')
+  return path.join(PATTERNS_DIR, `${safe}.js`)
+}
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({
@@ -19,13 +33,19 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     'set_pattern',
     {
-      description: 'Sets a new Strudel pattern. The browser updates live and music changes instantly.',
+      description: 'Sets a new Strudel pattern. The browser updates live and music changes instantly. Also writes to pattern.js.',
       inputSchema: { code: z.string().min(1).describe('Valid Strudel pattern code') },
     },
     async ({ code }) => {
       setPattern(code)
       clearError()
       broadcast({ type: 'pattern', code })
+      suppressNextWatcherBroadcast()
+      try {
+        await writeFile(PATTERN_FILE, code, 'utf8')
+      } catch (err) {
+        console.error('[mcp] failed to write pattern.js:', err)
+      }
       return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] }
     }
   )
@@ -54,7 +74,6 @@ export function createMcpServer(): McpServer {
     'play',
     { description: 'Starts Strudel playback in the browser.' },
     async () => {
-      setPlaying(true)
       broadcast({ type: 'play' })
       return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] }
     }
@@ -66,6 +85,68 @@ export function createMcpServer(): McpServer {
     async () => {
       setPlaying(false)
       broadcast({ type: 'stop' })
+      return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] }
+    }
+  )
+
+  server.registerTool(
+    'save_pattern',
+    {
+      description: 'Saves the current pattern (or provided code) to the patterns/ library under a given name.',
+      inputSchema: {
+        name: z.string().min(1).describe('Pattern name, e.g. "groovy-bass"'),
+        code: z.string().optional().describe('Code to save; omit to save current pattern'),
+      },
+    },
+    async ({ name, code }) => {
+      await ensurePatternsDir()
+      const toSave = code ?? getState().pattern
+      await writeFile(patternPath(name), toSave, 'utf8')
+      return { content: [{ type: 'text', text: JSON.stringify({ ok: true, name }) }] }
+    }
+  )
+
+  server.registerTool(
+    'list_patterns',
+    { description: 'Lists all saved patterns in the patterns/ library.' },
+    async () => {
+      await ensurePatternsDir()
+      let files: string[] = []
+      try {
+        files = await readdir(PATTERNS_DIR)
+      } catch {
+        files = []
+      }
+      const names = files.filter(f => f.endsWith('.js')).map(f => f.slice(0, -3))
+      return { content: [{ type: 'text', text: JSON.stringify({ patterns: names }) }] }
+    }
+  )
+
+  server.registerTool(
+    'load_pattern',
+    {
+      description: 'Loads a saved pattern by name, sets it as active, and broadcasts to the browser.',
+      inputSchema: { name: z.string().min(1).describe('Name of the saved pattern to load') },
+    },
+    async ({ name }) => {
+      const code = (await readFile(patternPath(name), 'utf8')).trim()
+      setPattern(code)
+      clearError()
+      suppressNextWatcherBroadcast()
+      await writeFile(PATTERN_FILE, code, 'utf8')
+      broadcast({ type: 'pattern', code, name })
+      return { content: [{ type: 'text', text: JSON.stringify({ ok: true, name, code }) }] }
+    }
+  )
+
+  server.registerTool(
+    'delete_pattern',
+    {
+      description: 'Deletes a saved pattern from the patterns/ library.',
+      inputSchema: { name: z.string().min(1) },
+    },
+    async ({ name }) => {
+      await unlink(patternPath(name))
       return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] }
     }
   )
