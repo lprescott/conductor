@@ -424,16 +424,16 @@ window.addEventListener('unhandledrejection', (e) => {
         lastCode = editor.code
       }
       if (msg.name) patternNameEl.textContent = msg.name
-      if (isPlaying) {
-        try {
-          await editor.evaluate(true)
-          clearError()
-          vscode.postMessage({ type: 'cleared' })
-        } catch (err) {
-          const message = String(err && err.message ? err.message : err)
-          showError(message)
-          vscode.postMessage({ type: 'error', message })
-        }
+    } else if (msg.type === 'evaluate') {
+      if (!editor || !isPlaying) return
+      try {
+        await editor.evaluate(true)
+        clearError()
+        vscode.postMessage({ type: 'cleared' })
+      } catch (err) {
+        const message = String(err && err.message ? err.message : err)
+        showError(message)
+        vscode.postMessage({ type: 'error', message })
       }
     } else if (msg.type === 'play') {
       await doPlay()
