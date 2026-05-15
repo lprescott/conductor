@@ -106,5 +106,6 @@ SSE-framed even for simple tool calls.
 
 ### `pattern.js`
 
-The daemon's view of the live pattern, kept at the repo root. The watcher reads it on every
-change and updates `state.pattern`. Written by `set_pattern` and `load_pattern`.
+The daemon's view of the live pattern, kept at the repo root (gitignored — rewritten on every
+`set_pattern` call). The watcher reads it on every change and updates `state.pattern`. Written
+by `set_pattern` and `load_pattern`.
