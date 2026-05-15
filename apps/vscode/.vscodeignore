@@ -2,7 +2,4 @@ src/**
 .gitignore
 tsconfig.json
 vitest.config.ts
-out/**/*.test.js
-out/**/*.test.js.map
-out/**/*.map
 node_modules/**
