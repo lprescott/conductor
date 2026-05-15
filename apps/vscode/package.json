@@ -4,6 +4,7 @@
   "description": "Live Strudel coding from VS Code — AI-ready MCP bridge",
   "version": "0.2.0",
   "publisher": "conductor",
+  "license": "AGPL-3.0-or-later",
   "engines": { "vscode": "^1.90.0" },
   "categories": ["Other"],
   "keywords": ["strudel", "live coding", "music", "mcp", "ai", "algorave"],

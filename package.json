@@ -1,6 +1,7 @@
 {
   "name": "conductor-monorepo",
   "private": true,
+  "license": "AGPL-3.0-or-later",
   "packageManager": "pnpm@9.12.3",
   "type": "module",
   "scripts": {
