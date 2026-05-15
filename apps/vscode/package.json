@@ -33,6 +33,7 @@
       { "command": "conductor.loadPattern",    "title": "Conductor: Load Pattern..." },
       { "command": "conductor.deletePattern",  "title": "Conductor: Delete Pattern",          "icon": "$(trash)" },
       { "command": "conductor.refreshPatterns","title": "Conductor: Refresh Patterns",        "icon": "$(refresh)" },
+      { "command": "conductor.insertPatternSnippet", "title": "Conductor: Insert Pattern Snippet", "icon": "$(insert)" },
       { "command": "conductor.initMcp",        "title": "Conductor: Add .mcp.json to Workspace" }
     ],
     "views": {

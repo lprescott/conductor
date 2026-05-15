@@ -316,6 +316,41 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     vscode.commands.registerCommand('conductor.refreshPatterns', () => patternProvider.refresh()),
 
+    vscode.commands.registerCommand('conductor.insertPatternSnippet', async () => {
+      const editor = vscode.window.activeTextEditor
+      if (!editor) {
+        vscode.window.showInformationMessage('Conductor: Open a .strudel file first.')
+        return
+      }
+      let patterns: string[]
+      try {
+        patterns = await client.listPatterns()
+      } catch (err) {
+        vscode.window.showErrorMessage(`Conductor: ${String(err)}`)
+        return
+      }
+      if (!patterns.length) {
+        vscode.window.showInformationMessage('No saved patterns to insert.')
+        return
+      }
+      const name = await vscode.window.showQuickPick(patterns.sort(), {
+        placeHolder: 'Insert which snippet?',
+      })
+      if (!name) return
+
+      const folder = vscode.workspace.workspaceFolders?.[0]
+      if (!folder) return
+      const filePath = path.join(folder.uri.fsPath, 'patterns', `${name}.js`)
+      let snippet: string
+      try {
+        snippet = fs.readFileSync(filePath, 'utf8').trim()
+      } catch (err) {
+        vscode.window.showErrorMessage(`Conductor: could not read ${filePath}`)
+        return
+      }
+      await editor.edit((b) => b.insert(editor.selection.active, snippet + '\n'))
+    }),
+
     vscode.commands.registerCommand('conductor.initMcp', async () => {
       const folders = vscode.workspace.workspaceFolders
       if (!folders?.length) {
