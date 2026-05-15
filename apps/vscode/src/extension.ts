@@ -155,12 +155,51 @@ export function activate(context: vscode.ExtensionContext): void {
       const code = editor.document.getText().trim()
       if (!code) { vscode.window.showWarningMessage('Conductor: Active file is empty.'); return }
       try {
+        currentPatternName = path.basename(editor.document.fileName, path.extname(editor.document.fileName))
         await client.setPattern(code)
         lastPushedUri = editor.document.uri
         StrudelPanel.createOrShow(context.extensionUri, handleWebviewMessage)
       } catch (err) {
         vscode.window.showErrorMessage(`Conductor: ${String(err)}`)
       }
+    }),
+
+    vscode.commands.registerCommand('conductor.newPattern', async () => {
+      const folders = vscode.workspace.workspaceFolders
+      if (!folders?.length) {
+        vscode.window.showWarningMessage('Conductor: No workspace folder open.')
+        return
+      }
+      const name = await vscode.window.showInputBox({
+        prompt: 'Pattern file name (without .js)',
+        placeHolder: 'my-groove',
+        validateInput: (v) => /^[a-z0-9][a-z0-9\-_]*$/i.test(v.trim()) ? undefined : 'Use letters, numbers, hyphens, underscores',
+      })
+      if (!name) return
+
+      const fileUri = vscode.Uri.joinPath(folders[0].uri, `${name.trim()}.js`)
+      const starter = [
+        'stack(',
+        '  sound("bd*4, ~ sd ~ sd").gain(0.8),',
+        '  sound("hh*8").gain(0.3)',
+        ')',
+      ].join('\n') + '\n'
+
+      try {
+        await vscode.workspace.fs.stat(fileUri)
+        const overwrite = await vscode.window.showWarningMessage(
+          `${name.trim()}.js already exists. Overwrite?`, { modal: true }, 'Overwrite'
+        )
+        if (overwrite !== 'Overwrite') return
+      } catch { /* file does not exist — good */ }
+
+      await vscode.workspace.fs.writeFile(fileUri, Buffer.from(starter, 'utf8'))
+      const doc = await vscode.workspace.openTextDocument(fileUri)
+      await vscode.window.showTextDocument(doc, { preview: false })
+      currentPatternName = name.trim()
+      await client.setPattern(starter.trim())
+      lastPushedUri = fileUri
+      StrudelPanel.createOrShow(context.extensionUri, handleWebviewMessage)
     }),
 
     vscode.commands.registerCommand('conductor.openPatternFile', async () => {

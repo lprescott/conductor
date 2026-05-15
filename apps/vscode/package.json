@@ -20,7 +20,8 @@
       { "command": "conductor.deletePattern",  "title": "Conductor: Delete Pattern",          "icon": "$(trash)" },
       { "command": "conductor.refreshPatterns","title": "Conductor: Refresh Patterns",        "icon": "$(refresh)" },
       { "command": "conductor.initMcp",          "title": "Conductor: Add .mcp.json to Workspace" },
-      { "command": "conductor.openPatternFile", "title": "Conductor: Open Pattern File",         "icon": "$(go-to-file)" }
+      { "command": "conductor.newPattern",      "title": "Conductor: New Pattern File",           "icon": "$(add)" },
+      { "command": "conductor.openPatternFile", "title": "Conductor: Open Pattern File",          "icon": "$(go-to-file)" }
     ],
     "views": {
       "explorer": [
@@ -32,6 +33,7 @@
     },
     "menus": {
       "view/title": [
+        { "command": "conductor.newPattern",      "when": "view == conductorPatterns", "group": "navigation" },
         { "command": "conductor.openPatternFile", "when": "view == conductorPatterns", "group": "navigation" },
         { "command": "conductor.refreshPatterns", "when": "view == conductorPatterns", "group": "navigation" },
         { "command": "conductor.savePattern",     "when": "view == conductorPatterns", "group": "navigation" }
