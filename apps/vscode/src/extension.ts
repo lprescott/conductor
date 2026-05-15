@@ -23,12 +23,12 @@ function probeDaemon(baseUrl: string): Promise<boolean> {
   })
 }
 
-async function ensureDaemonRunning(context: vscode.ExtensionContext): Promise<void> {
+async function ensureDaemonRunning(context: vscode.ExtensionContext): Promise<boolean> {
   const baseUrl = serverUrl()
-  if (await probeDaemon(baseUrl)) return
+  if (await probeDaemon(baseUrl)) return true
 
   const bundled = path.join(context.extensionPath, 'media', 'daemon.cjs')
-  if (!fs.existsSync(bundled)) return // dev install — user runs pnpm dev:server
+  if (!fs.existsSync(bundled)) return false // dev install — user runs pnpm dev:server
 
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
   const patternsDir = workspaceFolder
@@ -39,7 +39,11 @@ async function ensureDaemonRunning(context: vscode.ExtensionContext): Promise<vo
   context.subscriptions.push(output)
 
   daemonProcess = spawn(process.execPath, [bundled], {
-    env: { ...process.env, CONDUCTOR_PATTERNS_DIR: patternsDir },
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      CONDUCTOR_PATTERNS_DIR: patternsDir,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   daemonProcess.stdout?.on('data', (b: Buffer) => output.append(b.toString()))
@@ -50,11 +54,12 @@ async function ensureDaemonRunning(context: vscode.ExtensionContext): Promise<vo
   })
   context.subscriptions.push({ dispose: () => { daemonProcess?.kill() } })
 
-  for (let i = 0; i < 30; i++) {
-    if (await probeDaemon(baseUrl)) return
+  for (let i = 0; i < 50; i++) {
+    if (await probeDaemon(baseUrl)) return true
     await new Promise((r) => setTimeout(r, 100))
   }
-  output.appendLine('[conductor] daemon did not respond within 3s')
+  output.appendLine('[conductor] daemon did not respond within 5s')
+  return false
 }
 
 function serverUrl(): string {
@@ -104,7 +109,7 @@ async function ensureSongsDir(folder: vscode.Uri): Promise<vscode.Uri> {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  await ensureDaemonRunning(context)
+  const daemonUp = await ensureDaemonRunning(context)
   client = new ConductorClient(serverUrl())
 
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100)
@@ -146,16 +151,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   renderStatusBar()
 
-  // First-launch offline nudge — once per session, only if a .strudel file is in play.
-  let offlineNudgeShown = false
-  const maybeOfflineNudge = () => {
-    if (offlineNudgeShown || client.isConnected()) return
-    offlineNudgeShown = true
+  const showOfflineNudge = (): void => {
     void vscode.window.showWarningMessage(
-      'Conductor daemon is offline. The .strudel editor works locally, but MCP and pattern sync need it running.',
-      'Start Daemon', 'Dismiss',
-    ).then((choice) => {
-      if (choice === 'Start Daemon') vscode.commands.executeCommand('conductor.startDaemon')
+      'Conductor daemon failed to start. MCP and pattern sync are unavailable; the editor still works for local playback.',
+      'Retry', 'Show Logs',
+    ).then(async (choice) => {
+      if (choice === 'Retry') await vscode.commands.executeCommand('conductor.startDaemon')
+      if (choice === 'Show Logs') {
+        vscode.commands.executeCommand('workbench.action.output.show.Conductor Daemon')
+      }
     })
   }
 
@@ -310,8 +314,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   )
 
-  // Nudge after a short delay so we don't flash during the initial WS connect attempt.
-  setTimeout(maybeOfflineNudge, 2500)
+  if (!daemonUp) showOfflineNudge()
 }
 
 export function deactivate(): void {
