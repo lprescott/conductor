@@ -6,7 +6,6 @@ import { createMcpServer } from './mcp.js'
 import {
   addClient, removeClient, setPlaying, setError, clearError, getState,
 } from './state.js'
-import { startWatcher } from './watcher.js'
 
 const PORT = Number(process.env.PORT) || 7777
 const HOST = '127.0.0.1'
@@ -112,8 +111,6 @@ async function handleWsMessage(raw: string): Promise<void> {
   }
 }
 
-const stopWatcher = startWatcher()
-
 httpServer.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`[server] port ${PORT} already in use — kill the old process with:\n  fuser -k ${PORT}/tcp`)
@@ -133,7 +130,6 @@ process.on('unhandledRejection', (reason) => console.error('[unhandled rejection
 
 const shutdown = (signal: string) => {
   console.log(`[server] ${signal} received, shutting down`)
-  stopWatcher()
   httpServer.close(() => process.exit(0))
   // Force exit if close hangs on lingering WS connections
   setTimeout(() => process.exit(0), 1000).unref()

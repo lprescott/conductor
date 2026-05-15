@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import path from 'node:path'
-import { patternPath } from './mcp.js'
-import { PATTERNS_DIR } from './watcher.js'
+import { patternPath, PATTERNS_DIR } from './mcp.js'
 
 describe('patternPath', () => {
   it('returns path inside PATTERNS_DIR with .js extension', () => {

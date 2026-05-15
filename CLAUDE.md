@@ -65,12 +65,10 @@ daemon's `get_state` stays accurate.
 
 - **`state.ts`** — singleton holding `{ pattern, playing, error, clients }` plus subscribe-style
   listeners.
-- **`watcher.ts`** — exports `REPO_ROOT`, `PATTERN_FILE`, `PATTERNS_DIR`. Chokidar watches
-  `pattern.js` and updates `state.pattern` on add/change.
-- **`mcp.ts`** — exports `createMcpServer()` factory (fresh per HTTP request). Tools:
-  `get_pattern`, `set_pattern`, `get_state`, `play`, `stop`, `save_pattern`, `list_patterns`,
-  `load_pattern`, `delete_pattern`, `get_strudel_docs`. `set_pattern` and `load_pattern` write
-  to `pattern.js`.
+- **`mcp.ts`** — exports `createMcpServer()` factory (fresh per HTTP request) and `PATTERNS_DIR`.
+  Tools: `get_pattern`, `set_pattern`, `get_state`, `play`, `stop`, `save_pattern`,
+  `list_patterns`, `load_pattern`, `delete_pattern`, `get_strudel_docs`. Pattern state lives in
+  memory; only the `patterns/` library is read from / written to disk.
 - **`index.ts`** — HTTP server: `/mcp` (MCP/SSE), `/health`, and WebSocket upgrades.
   `handleWsMessage()` handles `state`, `error`, `cleared` (the webview's playback/error events).
 
@@ -103,9 +101,3 @@ daemon's `get_state` stays accurate.
 
 MCP clients must include `Accept: application/json, text/event-stream` on requests. Responses are
 SSE-framed even for simple tool calls.
-
-### `pattern.js`
-
-The daemon's view of the live pattern, kept at the repo root (gitignored — rewritten on every
-`set_pattern` call). The watcher reads it on every change and updates `state.pattern`. Written
-by `set_pattern` and `load_pattern`.

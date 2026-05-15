@@ -18,8 +18,10 @@ Open http://localhost:3000. The local daemon runs on http://localhost:7777.
 The daemon owns pattern state and exposes it over two channels:
 
 - **MCP HTTP** at `http://localhost:7777/mcp` — for AI IDEs (Claude Code, Cursor, etc.)
-- **WebSocket** at `ws://localhost:7777` — for the browser to receive live updates
-- **File watch** on `pattern.js` — edit the file directly and the browser updates
+- **WebSocket** at `ws://localhost:7777` — for the VS Code webview to receive live updates
+
+Open a `.strudel` file (e.g. under `songs/`) in VS Code with the bundled extension; the custom
+editor pushes the file's contents to the daemon on activation and on every save.
 
 ## MCP Configuration
 

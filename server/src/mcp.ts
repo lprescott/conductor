@@ -2,8 +2,11 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { readFile, writeFile, readdir, unlink, mkdir } from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { getState, setPattern, setPlaying, clearError } from './state.js'
-import { PATTERN_FILE, PATTERNS_DIR } from './watcher.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+export const PATTERNS_DIR = path.join(__dirname, '../..', 'patterns')
 
 async function ensurePatternsDir(): Promise<void> {
   await mkdir(PATTERNS_DIR, { recursive: true })
@@ -32,17 +35,12 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     'set_pattern',
     {
-      description: 'Sets the active Strudel pattern and writes it to pattern.js.',
+      description: 'Sets the active Strudel pattern in daemon state.',
       inputSchema: { code: z.string().min(1).describe('Valid Strudel pattern code') },
     },
     async ({ code }) => {
       setPattern(code)
       clearError()
-      try {
-        await writeFile(PATTERN_FILE, code, 'utf8')
-      } catch (err) {
-        console.error('[mcp] failed to write pattern.js:', err)
-      }
       return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] }
     }
   )
@@ -128,7 +126,6 @@ export function createMcpServer(): McpServer {
       const code = (await readFile(patternPath(name), 'utf8')).trim()
       setPattern(code)
       clearError()
-      await writeFile(PATTERN_FILE, code, 'utf8')
       return { content: [{ type: 'text', text: JSON.stringify({ ok: true, name, code }) }] }
     }
   )

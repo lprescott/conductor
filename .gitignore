@@ -8,6 +8,3 @@ out/
 
 songs/*
 !songs/.gitkeep
-
-# Daemon's live working file — rewritten on every set_pattern call.
-pattern.js
