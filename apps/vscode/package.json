@@ -113,7 +113,7 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "esbuild": "^0.24.0",
+    "esbuild": "^0.25.0",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.90.0",
     "@types/ws": "^8.5.0",
