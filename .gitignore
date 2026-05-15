@@ -5,3 +5,6 @@ out/
 **/media/strudel.js
 .env
 *.local
+
+songs/*
+!songs/.gitkeep

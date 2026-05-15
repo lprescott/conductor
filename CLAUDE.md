@@ -36,6 +36,9 @@ Saved patterns live in `patterns/` at the repo root as plain `.js` files. Create
 `save_pattern` MCP tool or the `Conductor: Save Pattern` command. The Conductor Patterns sidebar
 in Explorer lists them via the `list_patterns` MCP tool; single-click loads via `load_pattern`.
 
+Working `.strudel` files (the user's own songs) belong in `songs/`, which is gitignored except
+for the `.gitkeep` marker.
+
 ## Architecture
 
 The daemon (`server/`) and VS Code extension (`apps/vscode/`) are separate pnpm workspace
