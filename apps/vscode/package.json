@@ -10,18 +10,15 @@
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      { "command": "conductor.openPanel",      "title": "Conductor: Open Strudel Panel" },
       { "command": "conductor.play",           "title": "Conductor: Play",                    "icon": "$(play)" },
       { "command": "conductor.stop",           "title": "Conductor: Stop",                    "icon": "$(debug-stop)" },
       { "command": "conductor.togglePlay",     "title": "Conductor: Toggle Play/Stop" },
-      { "command": "conductor.pushPattern",    "title": "Conductor: Push Pattern to Conductor", "icon": "$(cloud-upload)" },
       { "command": "conductor.savePattern",    "title": "Conductor: Save Pattern",            "icon": "$(save)" },
       { "command": "conductor.loadPattern",    "title": "Conductor: Load Pattern..." },
       { "command": "conductor.deletePattern",  "title": "Conductor: Delete Pattern",          "icon": "$(trash)" },
       { "command": "conductor.refreshPatterns","title": "Conductor: Refresh Patterns",        "icon": "$(refresh)" },
-      { "command": "conductor.initMcp",          "title": "Conductor: Add .mcp.json to Workspace" },
-      { "command": "conductor.newPattern",      "title": "Conductor: New Pattern File",           "icon": "$(add)" },
-      { "command": "conductor.openPatternFile", "title": "Conductor: Open Pattern File",          "icon": "$(go-to-file)" }
+      { "command": "conductor.initMcp",        "title": "Conductor: Add .mcp.json to Workspace" },
+      { "command": "conductor.newPattern",     "title": "Conductor: New Pattern File",        "icon": "$(add)" }
     ],
     "views": {
       "explorer": [
@@ -31,27 +28,31 @@
         }
       ]
     },
+    "customEditors": [
+      {
+        "viewType": "conductor.strudelEditor",
+        "displayName": "Conductor",
+        "selector": [{ "filenamePattern": "*.strudel" }],
+        "priority": "default"
+      }
+    ],
+    "languages": [
+      {
+        "id": "javascript",
+        "extensions": [".strudel"]
+      }
+    ],
     "menus": {
       "view/title": [
         { "command": "conductor.newPattern",      "when": "view == conductorPatterns", "group": "navigation" },
-        { "command": "conductor.openPatternFile", "when": "view == conductorPatterns", "group": "navigation" },
         { "command": "conductor.refreshPatterns", "when": "view == conductorPatterns", "group": "navigation" },
         { "command": "conductor.savePattern",     "when": "view == conductorPatterns", "group": "navigation" }
       ],
       "view/item/context": [
         { "command": "conductor.deletePattern", "when": "view == conductorPatterns && viewItem == pattern", "group": "inline" }
-      ],
-      "editor/title": [
-        { "command": "conductor.pushPattern", "when": "resourceExtname == .js || resourceExtname == .ts", "group": "navigation" }
       ]
     },
     "keybindings": [
-      {
-        "command": "conductor.pushPattern",
-        "key": "ctrl+shift+enter",
-        "mac": "cmd+shift+enter",
-        "when": "editorTextFocus"
-      },
       {
         "command": "conductor.togglePlay",
         "key": "ctrl+shift+space",

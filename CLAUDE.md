@@ -86,14 +86,18 @@ edits) flows back over the same WebSocket via the extension host relay.
   daemon with auto-reconnect (3 s delay). Emits `connected`, `disconnected`, `message`. HTTP MCP
   methods: `fetchState`, `setPattern`, `play`, `stop`, `savePattern`, `loadPattern`,
   `deletePattern`, `listPatterns`.
-- **`src/panel.ts`** — `StrudelPanel` singleton. Creates a `WebviewPanel` with
-  `retainContextWhenHidden: true` (preserves audio context). Reads `media/index.html` as a
-  template, substitutes `{{NONCE}}` and `{{STRUDEL_URI}}`.
-- **`src/extension.ts`** — `activate()` wires everything together. Key state: `currentPatternName`
-  (shown in webview toolbar), `lastPushedUri` (auto-push target on file save), `lastPatternMessage`
-  (replayed to newly-opened panel). `syncPanelState()` posts `ui_state` to the webview; called
-  from `renderStatusBar()` and the `ready` handler. File-save watcher auto-pushes `lastPushedUri`
-  on every save.
+- **`src/strudelEditor.ts`** — `StrudelEditorProvider` implements `CustomTextEditorProvider` for
+  `*.strudel` files (registered via the `customEditors` contribution). Each open `.strudel`
+  document gets its own webview built from `media/index.html` (template substitutes `{{NONCE}}`
+  and `{{STRUDEL_URI}}`). On `ready` / view-state-active, calls `onDocumentActive(doc)` which
+  pushes the file's contents to the daemon as the live pattern and sets `lastPushedUri`.
+  Webview `code_changed` messages are applied to the document via `WorkspaceEdit` (with a
+  suppression flag to avoid echo). The static `StrudelEditorProvider.activePanel` tracks the
+  most-recently-active webview so play/stop commands can post into it.
+- **`src/extension.ts`** — `activate()` wires everything together. Key state: `lastPushedUri`
+  (auto-push target on file save). The `play`/`stop`/`togglePlay` commands call the daemon and
+  forward `play`/`stop` messages to `StrudelEditorProvider.activePanel`. The save watcher
+  auto-pushes `lastPushedUri` on every save.
 - **`src/patternsProvider.ts`** — `PatternProvider` tree data provider for the Conductor Patterns
   sidebar. Single-click on a pattern loads it.
 - **`media/index.html`** — Strudel webview. Toolbar uses VS Code CSS variables for theming.
