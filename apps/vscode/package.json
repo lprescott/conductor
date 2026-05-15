@@ -5,6 +5,14 @@
   "version": "0.2.5",
   "publisher": "lprescott",
   "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lprescott/conductor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lprescott/conductor/issues"
+  },
+  "homepage": "https://github.com/lprescott/conductor#readme",
   "sponsor": { "url": "https://buymeacoffee.com/lprescott" },
   "engines": { "vscode": "^1.90.0" },
   "categories": ["Other", "Notebooks"],
