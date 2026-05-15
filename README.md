@@ -1,0 +1,58 @@
+# conductor
+
+A browser-based live coding music environment that AI IDEs can control in real time via MCP.
+
+Write patterns in natural language with your AI IDE; the browser updates live and plays the result.
+
+## Quick Start
+
+```bash
+pnpm install
+pnpm dev
+```
+
+Open http://localhost:3000. The local daemon runs on http://localhost:7777.
+
+## How It Works
+
+The daemon owns pattern state and exposes it over two channels:
+
+- **MCP HTTP** at `http://localhost:7777/mcp` — for AI IDEs (Claude Code, Cursor, etc.)
+- **WebSocket** at `ws://localhost:7777` — for the browser to receive live updates
+- **File watch** on `pattern.js` — edit the file directly and the browser updates
+
+## MCP Configuration
+
+A `.mcp.json` is already present for Claude Code — it auto-connects when you open this project.
+
+For other AI IDEs, point them at:
+
+```json
+{
+  "mcpServers": {
+    "conductor": {
+      "type": "http",
+      "url": "http://localhost:7777/mcp"
+    }
+  }
+}
+```
+
+## MCP Tools
+
+| Tool | Input | Description |
+|------|-------|-------------|
+| `get_pattern` | — | Returns the current Strudel pattern |
+| `set_pattern` | `{ code: string }` | Updates the pattern; browser changes instantly |
+| `get_state` | — | Returns `{ playing, error, connectedClients }` |
+| `play` | — | Starts playback |
+| `stop` | — | Stops playback |
+| `get_strudel_docs` | — | Returns Strudel API reference for writing patterns |
+
+## Note on Audio
+
+Browsers block audio until a user gesture. Click anywhere in the browser after opening the page before sending patterns from your IDE. Patterns sent before that first click will load silently.
+
+## License
+
+AGPL-3.0 (required by `@strudel/repl`)
