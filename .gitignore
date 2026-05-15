@@ -3,6 +3,8 @@ dist/
 out/
 *.vsix
 **/media/strudel.js
+**/media/daemon.cjs
+apps/vscode/LICENSE
 .env
 *.local
 

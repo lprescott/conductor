@@ -1,6 +1,8 @@
 import * as vscode from 'vscode'
 import * as fs from 'node:fs'
+import * as http from 'node:http'
 import * as path from 'node:path'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { ConductorClient } from './client'
 import { PatternProvider, PatternItem } from './patternsProvider'
 import { StrudelEditorProvider } from './strudelEditor'
@@ -9,6 +11,52 @@ import type { WebviewInbound } from './strudelEditor'
 let client: ConductorClient
 let statusBar: vscode.StatusBarItem
 let lastPushedUri: vscode.Uri | undefined
+let daemonProcess: ChildProcess | undefined
+
+function probeDaemon(baseUrl: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get(`${baseUrl}/health`, { timeout: 500 }, (res) => {
+      res.resume()
+      resolve((res.statusCode ?? 0) >= 200 && (res.statusCode ?? 0) < 500)
+    })
+    req.on('error', () => resolve(false))
+    req.on('timeout', () => { req.destroy(); resolve(false) })
+  })
+}
+
+async function ensureDaemonRunning(context: vscode.ExtensionContext): Promise<void> {
+  const baseUrl = serverUrl()
+  if (await probeDaemon(baseUrl)) return
+
+  const bundled = path.join(context.extensionPath, 'media', 'daemon.cjs')
+  if (!fs.existsSync(bundled)) return // dev install — user runs pnpm dev:server
+
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
+  const patternsDir = workspaceFolder
+    ? path.join(workspaceFolder.uri.fsPath, 'patterns')
+    : path.join(context.globalStorageUri.fsPath, 'patterns')
+
+  const output = vscode.window.createOutputChannel('Conductor Daemon')
+  context.subscriptions.push(output)
+
+  daemonProcess = spawn(process.execPath, [bundled], {
+    env: { ...process.env, CONDUCTOR_PATTERNS_DIR: patternsDir },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  daemonProcess.stdout?.on('data', (b: Buffer) => output.append(b.toString()))
+  daemonProcess.stderr?.on('data', (b: Buffer) => output.append(b.toString()))
+  daemonProcess.on('exit', (code) => {
+    output.appendLine(`[conductor] daemon exited (${code})`)
+    daemonProcess = undefined
+  })
+  context.subscriptions.push({ dispose: () => { daemonProcess?.kill() } })
+
+  for (let i = 0; i < 30; i++) {
+    if (await probeDaemon(baseUrl)) return
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  output.appendLine('[conductor] daemon did not respond within 3s')
+}
 
 function serverUrl(): string {
   return vscode.workspace.getConfiguration('conductor').get<string>('serverUrl', 'http://localhost:7777')
@@ -56,7 +104,8 @@ async function ensureSongsDir(folder: vscode.Uri): Promise<vscode.Uri> {
   return songs
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  await ensureDaemonRunning(context)
   client = new ConductorClient(serverUrl())
 
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100)
@@ -289,4 +338,5 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   client?.dispose()
+  daemonProcess?.kill()
 }

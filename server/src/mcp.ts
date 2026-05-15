@@ -5,8 +5,21 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getState, setPattern, setPlaying, clearError } from './state.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-export const PATTERNS_DIR = path.join(__dirname, '../..', 'patterns')
+function resolvePatternsDir(): string {
+  const fromEnv = process.env.CONDUCTOR_PATTERNS_DIR
+  if (fromEnv) return path.resolve(fromEnv)
+  // Dev path: tsx + ESM. `import.meta.url` is undefined in a CJS bundle, so
+  // fall back to cwd if anything throws — the extension always sets the env
+  // var when it spawns a bundled daemon.
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url))
+    return path.join(here, '../..', 'patterns')
+  } catch {
+    return path.join(process.cwd(), 'patterns')
+  }
+}
+
+export const PATTERNS_DIR = resolvePatternsDir()
 
 async function ensurePatternsDir(): Promise<void> {
   await mkdir(PATTERNS_DIR, { recursive: true })
