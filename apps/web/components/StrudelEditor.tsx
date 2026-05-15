@@ -12,7 +12,8 @@ interface StrudelMirror {
   evaluate(): Promise<void>
   start(): void
   stop(): void
-  onChange(cb: (update: { docChanged: boolean; state: { doc: { toString(): string } } }) => void): void
+  // onChange exists on some builds of @strudel/repl but is not guaranteed
+  onChange?: (cb: (update: { docChanged: boolean; state: { doc: { toString(): string } } }) => void) => void
 }
 
 interface StrudelEditorElement extends HTMLElement {
@@ -111,15 +112,18 @@ export function StrudelEditor() {
       }
 
       // Debounced onChange — syncs browser edits back to the server
-      let debounceTimer: ReturnType<typeof setTimeout> | null = null
-      el.editor.onChange((update) => {
-        if (!update.docChanged) return
-        const code = update.state.doc.toString()
-        if (debounceTimer) clearTimeout(debounceTimer)
-        debounceTimer = setTimeout(() => {
-          sendRef.current?.({ type: 'code_changed', code })
-        }, 800)
-      })
+      // onChange is not available in all @strudel/repl builds
+      if (typeof el.editor.onChange === 'function') {
+        let debounceTimer: ReturnType<typeof setTimeout> | null = null
+        el.editor.onChange((update) => {
+          if (!update.docChanged) return
+          const code = update.state.doc.toString()
+          if (debounceTimer) clearTimeout(debounceTimer)
+          debounceTimer = setTimeout(() => {
+            sendRef.current?.({ type: 'code_changed', code })
+          }, 800)
+        })
+      }
     })
   }, [enqueueEval])
 
