@@ -127,5 +127,16 @@ httpServer.listen(PORT, HOST, () => {
   console.log(`[server] MCP endpoint: http://${HOST}:${PORT}/mcp`)
 })
 
-process.on('SIGINT', () => { stopWatcher(); httpServer.close(() => process.exit(0)) })
-process.on('SIGTERM', () => { stopWatcher(); httpServer.close(() => process.exit(0)) })
+// Keep the daemon alive on unexpected errors — the MCP client expects a long-lived process.
+process.on('uncaughtException', (err) => console.error('[uncaught]', err))
+process.on('unhandledRejection', (reason) => console.error('[unhandled rejection]', reason))
+
+const shutdown = (signal: string) => {
+  console.log(`[server] ${signal} received, shutting down`)
+  stopWatcher()
+  httpServer.close(() => process.exit(0))
+  // Force exit if close hangs on lingering WS connections
+  setTimeout(() => process.exit(0), 1000).unref()
+}
+process.on('SIGINT', () => shutdown('SIGINT'))
+process.on('SIGTERM', () => shutdown('SIGTERM'))

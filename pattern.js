@@ -1,13 +1,29 @@
+// Conductor demo — open with the Conductor custom editor, hit Play.
 stack(
-  sound("bd*4").gain(0.85),
-  sound("~ sd ~ sd").gain(0.6)
-    .every(6, x => x.fast(2).gain(0.45)),
-  sound("[hh hh] [hh hh*2] [hh hh] [hh hh hh]").gain(0.28)
-    .pan("<-0.3 0 0.3 0>"),
-  note("<c2 c2 ab1 g1>*2").s("piano").lpf(380).gain(0.8),
-  note("<[c4,eb4,g4] [ab3,c4,eb4] [eb4,g4,bb4] [g3,bb3,d4]>").s("piano")
-    .room(0.7).delay(0.4).gain(0.32).slow(2).lpf(1200)
-    .every(3, x => x.rev()),
-  note("<c5 ~ eb5 ~ g4 ~ f5 ~>").s("piano").room(0.5).delay(0.3).gain(0.45)
-    .every(4, x => x.fast(2))
-)
+  // kick on every beat
+  sound("bd*4").gain(0.9),
+
+  // snare on 2 & 4 with a ghost roll every 8 bars
+  sound("~ sd ~ sd").gain(0.65)
+    .every(8, x => x.fast(2).gain(0.45)),
+
+  // hats with a little swing
+  sound("hh*8").gain(0.3)
+    .pan(sine.range(-0.4, 0.4).slow(4)),
+
+  // sub bass — A minor → F → C → G
+  note("<a1 a1 f1 f1 c2 c2 g1 g1>").s("sawtooth")
+    .lpf(perlin.range(200, 700).slow(8))
+    .resonance(8).gain(0.7),
+
+  // chord pad
+  note("<[a3,c4,e4] [f3,a3,c4] [c4,e4,g4] [g3,b3,d4]>").s("piano")
+    .room(0.8).delay(0.35).gain(0.35).slow(2)
+    .lpf(sine.range(800, 2400).slow(16)),
+
+  // lead — pentatonic noodle, drops out every 3rd bar
+  note("<a4 c5 e5 g5 e5 c5 ~ e5>").s("triangle")
+    .room(0.6).delay(0.5).gain(0.4)
+    .every(3, x => x.silence)
+    .off(0.25, x => x.up(7).gain(0.18))
+).cpm(85)

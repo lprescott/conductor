@@ -13,12 +13,13 @@
       { "command": "conductor.play",           "title": "Conductor: Play",                    "icon": "$(play)" },
       { "command": "conductor.stop",           "title": "Conductor: Stop",                    "icon": "$(debug-stop)" },
       { "command": "conductor.togglePlay",     "title": "Conductor: Toggle Play/Stop" },
+      { "command": "conductor.newSong",        "title": "Conductor: New Song",                "icon": "$(add)" },
+      { "command": "conductor.startDaemon",    "title": "Conductor: Start Daemon" },
       { "command": "conductor.savePattern",    "title": "Conductor: Save Pattern",            "icon": "$(save)" },
       { "command": "conductor.loadPattern",    "title": "Conductor: Load Pattern..." },
       { "command": "conductor.deletePattern",  "title": "Conductor: Delete Pattern",          "icon": "$(trash)" },
       { "command": "conductor.refreshPatterns","title": "Conductor: Refresh Patterns",        "icon": "$(refresh)" },
-      { "command": "conductor.initMcp",        "title": "Conductor: Add .mcp.json to Workspace" },
-      { "command": "conductor.newPattern",     "title": "Conductor: New Pattern File",        "icon": "$(add)" }
+      { "command": "conductor.initMcp",        "title": "Conductor: Add .mcp.json to Workspace" }
     ],
     "views": {
       "explorer": [
@@ -44,7 +45,7 @@
     ],
     "menus": {
       "view/title": [
-        { "command": "conductor.newPattern",      "when": "view == conductorPatterns", "group": "navigation" },
+        { "command": "conductor.newSong",         "when": "view == conductorPatterns", "group": "navigation" },
         { "command": "conductor.refreshPatterns", "when": "view == conductorPatterns", "group": "navigation" },
         { "command": "conductor.savePattern",     "when": "view == conductorPatterns", "group": "navigation" }
       ],
@@ -66,11 +67,6 @@
           "type": "string",
           "default": "http://localhost:7777",
           "description": "Conductor daemon base URL (change if running on a non-default port)"
-        },
-        "conductor.patternFile": {
-          "type": "string",
-          "default": "",
-          "description": "Absolute path to the live pattern file. Leave blank to search for pattern.js in the workspace root."
         }
       }
     }

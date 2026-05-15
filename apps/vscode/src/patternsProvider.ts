@@ -40,7 +40,9 @@ export class PatternProvider implements vscode.TreeDataProvider<PatternItem | Me
 
   async getChildren(): Promise<Array<PatternItem | MessageItem>> {
     if (!this.client.isConnected()) {
-      return [new MessageItem('Daemon not running — start pnpm dev:server', 'circle-slash')]
+      const m = new MessageItem('Daemon offline — click to start', 'circle-slash')
+      m.command = { command: 'conductor.startDaemon', title: 'Start Daemon' }
+      return [m]
     }
     try {
       const names = await this.client.listPatterns()

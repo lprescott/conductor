@@ -18,20 +18,23 @@ function renderStatusBar(): void {
   const s = client.getState()
   if (!client.isConnected()) {
     statusBar.text = '$(circle-slash) Conductor'
-    statusBar.tooltip = `Cannot connect to ${serverUrl()}`
+    statusBar.tooltip = `Daemon offline at ${serverUrl()}\n\nClick to start it`
+    statusBar.command = 'conductor.startDaemon'
     statusBar.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground')
-  } else if (s.error) {
+    return
+  }
+  statusBar.command = 'conductor.togglePlay'
+  statusBar.backgroundColor = undefined
+  if (s.error) {
     statusBar.text = '$(warning) Conductor'
     statusBar.tooltip = `Eval error: ${s.error}\n\nClick to stop`
     statusBar.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground')
   } else if (s.playing) {
     statusBar.text = '$(play) Conductor'
     statusBar.tooltip = 'Playing — click to stop'
-    statusBar.backgroundColor = undefined
   } else {
     statusBar.text = '$(debug-pause) Conductor'
     statusBar.tooltip = 'Stopped — click to play'
-    statusBar.backgroundColor = undefined
   }
 }
 
@@ -47,11 +50,16 @@ function postToActivePanel(message: object): void {
   void StrudelEditorProvider.activePanel?.webview.postMessage(message)
 }
 
+async function ensureSongsDir(folder: vscode.Uri): Promise<vscode.Uri> {
+  const songs = vscode.Uri.joinPath(folder, 'songs')
+  try { await vscode.workspace.fs.createDirectory(songs) } catch { /* exists */ }
+  return songs
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   client = new ConductorClient(serverUrl())
 
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100)
-  statusBar.command = 'conductor.togglePlay'
   statusBar.show()
   context.subscriptions.push(statusBar)
 
@@ -90,6 +98,19 @@ export function activate(context: vscode.ExtensionContext): void {
 
   renderStatusBar()
 
+  // First-launch offline nudge — once per session, only if a .strudel file is in play.
+  let offlineNudgeShown = false
+  const maybeOfflineNudge = () => {
+    if (offlineNudgeShown || client.isConnected()) return
+    offlineNudgeShown = true
+    void vscode.window.showWarningMessage(
+      'Conductor daemon is offline. The .strudel editor works locally, but MCP and pattern sync need it running.',
+      'Start Daemon', 'Dismiss',
+    ).then((choice) => {
+      if (choice === 'Start Daemon') vscode.commands.executeCommand('conductor.startDaemon')
+    })
+  }
+
   // Auto-push on save of the most recently activated .strudel doc
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument(async (doc) => {
@@ -106,25 +127,17 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
 
     vscode.commands.registerCommand('conductor.play', async () => {
-      try {
-        await client.play()
-        client.updateState({ playing: true, error: null })
-        renderStatusBar()
-        postToActivePanel({ type: 'play' })
-      } catch (err) {
-        vscode.window.showErrorMessage(`Conductor: ${String(err)}`)
-      }
+      postToActivePanel({ type: 'play' })
+      try { await client.play() } catch { /* daemon offline is fine — webview plays locally */ }
+      client.updateState({ playing: true, error: null })
+      renderStatusBar()
     }),
 
     vscode.commands.registerCommand('conductor.stop', async () => {
-      try {
-        await client.stop()
-        client.updateState({ playing: false })
-        renderStatusBar()
-        postToActivePanel({ type: 'stop' })
-      } catch (err) {
-        vscode.window.showErrorMessage(`Conductor: ${String(err)}`)
-      }
+      postToActivePanel({ type: 'stop' })
+      try { await client.stop() } catch { /* same */ }
+      client.updateState({ playing: false })
+      renderStatusBar()
     }),
 
     vscode.commands.registerCommand('conductor.togglePlay', async () => {
@@ -133,25 +146,29 @@ export function activate(context: vscode.ExtensionContext): void {
       )
     }),
 
-    vscode.commands.registerCommand('conductor.newPattern', async () => {
-      const folders = vscode.workspace.workspaceFolders
-      if (!folders?.length) {
+    vscode.commands.registerCommand('conductor.newSong', async () => {
+      const folder = vscode.workspace.workspaceFolders?.[0]
+      if (!folder) {
         vscode.window.showWarningMessage('Conductor: No workspace folder open.')
         return
       }
       const name = await vscode.window.showInputBox({
-        prompt: 'Pattern file name (without .strudel)',
+        prompt: 'Song name (without .strudel)',
         placeHolder: 'my-groove',
         validateInput: (v) => /^[a-z0-9][a-z0-9\-_]*$/i.test(v.trim()) ? undefined : 'Use letters, numbers, hyphens, underscores',
       })
       if (!name) return
 
-      const fileUri = vscode.Uri.joinPath(folders[0].uri, `${name.trim()}.strudel`)
+      const songs = await ensureSongsDir(folder.uri)
+      const fileUri = vscode.Uri.joinPath(songs, `${name.trim()}.strudel`)
       const starter = [
+        '// ' + name.trim(),
         'stack(',
-        '  sound("bd*4, ~ sd ~ sd").gain(0.8),',
-        '  sound("hh*8").gain(0.3)',
-        ')',
+        '  sound("bd*4").gain(0.85),',
+        '  sound("~ sd ~ sd").gain(0.6),',
+        '  sound("hh*8").gain(0.3),',
+        '  note("<c2 c2 ab1 g1>*2").s("sawtooth").lpf(400).gain(0.7),',
+        ').cpm(90)',
       ].join('\n') + '\n'
 
       try {
@@ -160,10 +177,23 @@ export function activate(context: vscode.ExtensionContext): void {
           `${name.trim()}.strudel already exists. Overwrite?`, { modal: true }, 'Overwrite'
         )
         if (overwrite !== 'Overwrite') return
-      } catch { /* file does not exist — good */ }
+      } catch { /* good — file does not exist */ }
 
       await vscode.workspace.fs.writeFile(fileUri, Buffer.from(starter, 'utf8'))
       await vscode.commands.executeCommand('vscode.openWith', fileUri, StrudelEditorProvider.viewType)
+    }),
+
+    vscode.commands.registerCommand('conductor.startDaemon', () => {
+      const folder = vscode.workspace.workspaceFolders?.[0]
+      if (!folder) {
+        vscode.window.showWarningMessage('Conductor: open the conductor workspace first.')
+        return
+      }
+      const name = 'Conductor Daemon'
+      const existing = vscode.window.terminals.find((t) => t.name === name)
+      const terminal = existing ?? vscode.window.createTerminal({ name, cwd: folder.uri.fsPath })
+      terminal.show()
+      if (!existing) terminal.sendText('pnpm dev:server', true)
     }),
 
     vscode.commands.registerCommand('conductor.savePattern', async () => {
@@ -252,6 +282,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
   )
+
+  // Nudge after a short delay so we don't flash during the initial WS connect attempt.
+  setTimeout(maybeOfflineNudge, 2500)
 }
 
 export function deactivate(): void {
