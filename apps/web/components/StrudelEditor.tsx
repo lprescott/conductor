@@ -8,12 +8,11 @@ import { PatternPanel } from './PatternPanel'
 import '@strudel/repl'
 
 interface StrudelMirror {
+  code: string   // updated on every keystroke by the internal CodeMirror onChange
   setCode(code: string): void
   evaluate(): Promise<void>
   start(): void
   stop(): void
-  // onChange exists on some builds of @strudel/repl but is not guaranteed
-  onChange?: (cb: (update: { docChanged: boolean; state: { doc: { toString(): string } } }) => void) => void
 }
 
 interface StrudelEditorElement extends HTMLElement {
@@ -43,6 +42,7 @@ export function StrudelEditor() {
 
   // Serial evaluate queue — avoids concurrent editor.evaluate() calls
   const evalChainRef = useRef<Promise<void>>(Promise.resolve())
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [isPlaying, setIsPlaying] = useState(false)
   const [evalError, setEvalError] = useState<string | null>(null)
@@ -111,20 +111,22 @@ export function StrudelEditor() {
         enqueueEval(pending.code, pending.name)
       }
 
-      // Debounced onChange — syncs browser edits back to the server
-      // onChange is not available in all @strudel/repl builds
-      if (typeof el.editor.onChange === 'function') {
-        let debounceTimer: ReturnType<typeof setTimeout> | null = null
-        el.editor.onChange((update) => {
-          if (!update.docChanged) return
-          const code = update.state.doc.toString()
-          if (debounceTimer) clearTimeout(debounceTimer)
-          debounceTimer = setTimeout(() => {
-            sendRef.current?.({ type: 'code_changed', code })
-          }, 800)
-        })
-      }
+      let lastCode = el.editor.code
+      let debounceTimer: ReturnType<typeof setTimeout> | null = null
+      const pollInterval = setInterval(() => {
+        const code = el.editor.code
+        if (code === lastCode) return
+        lastCode = code
+        if (debounceTimer) clearTimeout(debounceTimer)
+        debounceTimer = setTimeout(() => {
+          sendRef.current?.({ type: 'code_changed', code })
+        }, 800)
+      }, 1000)
+      intervalRef.current = pollInterval
     })
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
   }, [enqueueEval])
 
   // Report initial play state once connected
