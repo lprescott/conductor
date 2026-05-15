@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 
 export type ServerMessage =
-  | { type: 'pattern'; code: string }
+  | { type: 'pattern'; code: string; name?: string }
   | { type: 'play' }
   | { type: 'stop' }
 
@@ -11,6 +11,7 @@ export type ClientMessage =
   | { type: 'state'; playing: boolean }
   | { type: 'error'; message: string }
   | { type: 'cleared' }
+  | { type: 'code_changed'; code: string }
 
 export type SocketStatus = 'connecting' | 'connected' | 'disconnected'
 
@@ -36,9 +37,7 @@ export function usePatternSocket({ url = 'ws://localhost:7777', onMessage }: Use
       ws = new WebSocket(url)
       wsRef.current = ws
 
-      ws.onopen = () => {
-        if (!destroyed) setStatus('connected')
-      }
+      ws.onopen = () => { if (!destroyed) setStatus('connected') }
 
       ws.onclose = () => {
         if (!destroyed) {
