@@ -53,6 +53,9 @@ export class StrudelEditorProvider implements vscode.CustomTextEditorProvider {
         return
       }
       postPattern()
+      // External edits (e.g. writes from another tool) don't fire onDidSave,
+      // so re-evaluate here too. The webview no-ops if it isn't playing.
+      void panel.webview.postMessage({ type: 'evaluate' })
     })
 
     // Save → re-evaluate the webview AND push the new code to the daemon.
