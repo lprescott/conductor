@@ -12,6 +12,6 @@
     "test": "pnpm --filter server test && pnpm --filter conductor-vscode test"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.5"
   }
 }
